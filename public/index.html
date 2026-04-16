@@ -403,15 +403,24 @@
         };
 
         window.formatContent = function(text) {
-            if(!text) return "";
-            return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
-                let src = "";
-                if (localImages[p1]) src = localImages[p1];
-                else if (p1.startsWith('data:image') || p1.startsWith('http')) src = p1;
-                else src = "images/" + p1;
-                return `<img src="${src}" class="quiz-image" alt="Hình ảnh" onerror="this.style.display='none'"/>`;
-            });
-        };
+    if(!text) return "";
+    return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
+        let src = "";
+        // Nếu là link ảnh từ mạng (Cloudinary)
+        if (p1.startsWith('http')) {
+            src = p1;
+        } 
+        // Nếu là ảnh lưu tạm Base64
+        else if (localImages[p1]) {
+            src = localImages[p1];
+        } 
+        // Nếu là ảnh trong folder public/images
+        else {
+            src = "images/" + p1;
+        }
+        return `<img src="${src}" class="quiz-image" alt="Hình ảnh" onerror="this.style.display='none'"/>`;
+    });
+};
 
         function renderMath(element) {
             if (!window.renderMathInElement) return;
@@ -901,23 +910,49 @@
         };
 
         editor.addEventListener('paste', (event) => {
-            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-            for (let index in items) {
-                const item = items[index];
-                if (item.kind === 'file' && item.type.includes('image/')) {
-                    event.preventDefault();
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const imgId = 'img_' + Date.now();
-                        localImages[imgId] = e.target.result; 
+    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.includes('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            
+            // Hiển thị thông báo đang xử lý
+            draftStatus.textContent = "Đang tải ảnh lên mạng...";
+            draftStatus.classList.remove('hidden');
+
+            reader.onload = function(e) {
+                const formData = new FormData();
+                formData.append('file', e.target.result);
+                formData.append('upload_preset', 'oqpr62fq'); // <--- THAY VÀO ĐÂY
+
+                fetch('https://api.cloudinary.com/v1_1/TÊN_CLOUD_NAME_CỦA_BẠN/image/upload', { // <--- THAY VÀO ĐÂY
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.secure_url) {
+                        const imgTag = `[img:${data.secure_url}]`;
                         const start = editor.selectionStart, end = editor.selectionEnd;
-                        editor.setRangeText(`[img:${imgId}]`, start, end, 'end');
-                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
-                    };
-                    reader.readAsDataURL(item.getAsFile());
-                }
-            }
-        });
+                        editor.setRangeText(imgTag, start, end, 'end');
+                        
+                        draftStatus.textContent = "Tải ảnh thành công!";
+                        setTimeout(() => draftStatus.classList.add('hidden'), 2000);
+                        
+                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
+                    }
+                })
+                .catch(err => {
+                    alert("Lỗi tải ảnh lên Cloudinary!");
+                    draftStatus.classList.add('hidden');
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+});
 
         document.getElementById('word-upload').addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;

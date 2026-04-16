@@ -408,7 +408,7 @@
                 let src = "";
                 if (localImages[p1]) src = localImages[p1];
                 else if (p1.startsWith('data:image') || p1.startsWith('http')) src = p1;
-                else src = "/images/" + p1;
+                else src = "images/" + p1;
                 return `<img src="${src}" class="quiz-image" alt="Hình ảnh" onerror="this.style.display='none'"/>`;
             });
         };

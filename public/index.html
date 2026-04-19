@@ -889,25 +889,41 @@
             draftStatus.classList.remove('hidden'); setTimeout(() => draftStatus.classList.add('hidden'), 2000);
         };
 
-        window.loadDraft = function() {
-            const dt = localStorage.getItem('quiz_draft_title'), dc = localStorage.getItem('quiz_draft_content'), di = localStorage.getItem('quiz_draft_images');
-            if (dt !== null) quizTitleInput.value = dt;
-            if (di !== null) { try { localImages = JSON.parse(di); } catch(e) {} }
-            if (dc !== null) { editor.value = dc; renderPreview(); }
-        };
+window.saveQuiz = function() {
+    const title = quizTitleInput.value.trim() || "Bai_Tap_Trac_Nghiem";
+    const qs = parseEditorContent();
+    if (qs.length === 0) return alert("Chưa có câu hỏi nào!");
 
-        window.saveQuiz = function() {
-            const title = quizTitleInput.value.trim() || "Bai_Tap_Trac_Nghiem";
-            const qs = parseEditorContent();
-            if (qs.length === 0) return alert("Chưa có câu hỏi nào!");
-            for (let i = 0; i < qs.length; i++) {
-                if (qs[i].options.length < 4) return alert(`Lỗi tại ${qs[i].originalPrefix}: Chưa đủ 4 đáp án (A, B, C, D).`);
-                if (!qs[i].options.some(opt => opt.correct)) return alert(`Lỗi tại ${qs[i].originalPrefix}: Chưa chọn đáp án đúng.`);
-            }
-            const blob = new Blob([JSON.stringify({title, questions: qs, images: localImages}, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = title.replace(/[^a-z0-9]/gi, '_') + ".json";
-            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        };
+    // --- BẮT ĐẦU PHẦN SỬA LỖI ---
+    // 1. Tìm tất cả các mã [img:ID] thực sự có trong nội dung đề
+    const usedImages = {};
+    const imgRegex = /\[img:(.*?)\]/g;
+    
+    // Chuyển toàn bộ câu hỏi thành chuỗi để tìm kiếm mã ảnh nhanh hơn
+    const quizString = JSON.stringify(qs);
+    let match;
+    
+    while ((match = imgRegex.exec(quizString)) !== null) {
+        const imgId = match[1];
+        // Chỉ copy những ảnh nào có trong bộ nhớ localImages vào file JSON
+        if (localImages[imgId]) {
+            usedImages[imgId] = localImages[imgId];
+        }
+    }
+    // --- KẾT THÚC PHẦN SỬA LỖI ---
+
+    for (let i = 0; i < qs.length; i++) {
+        if (qs[i].options.length < 4) return alert(`Lỗi tại ${qs[i].originalPrefix}: Chưa đủ 4 đáp án.`);
+        if (!qs[i].options.some(opt => opt.correct)) return alert(`Lỗi tại ${qs[i].originalPrefix}: Chưa chọn đáp án đúng.`);
+    }
+
+    // Thay vì lưu 'localImages', chúng ta chỉ lưu 'usedImages' (những ảnh thực sự dùng)
+    const blob = new Blob([JSON.stringify({title, questions: qs, images: usedImages}, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = title.replace(/[^a-z0-9]/gi, '_') + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+};
 
         editor.addEventListener('paste', (event) => {
     const items = (event.clipboardData || event.originalEvent.clipboardData).items;

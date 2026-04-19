@@ -1162,85 +1162,78 @@ window.saveQuiz = function() {
         window.clearSavedQuiz = () => { localStorage.removeItem('quiz_progress'); resumeAlert.classList.add('hidden'); };
         
         // HÀM KHÔI PHỤC BỌC LỖI (BULLETPROOF RESUME)
-        window.resumeSavedQuiz = function() {
-            try {
-                const saved = localStorage.getItem('quiz_progress'); 
-                if (!saved) return;
-                
-                const data = JSON.parse(saved); 
-                currentQuizData = data.questions || []; 
-                userAnswers = data.answers || {};
-                if (data.images) Object.assign(localImages, data.images); 
-                
-                document.getElementById('take-title').textContent = data.title || "Bài thi";
-                document.getElementById('upload-area').classList.add('hidden'); 
-                document.getElementById('quiz-area').classList.remove('hidden'); 
-                resumeAlert.classList.add('hidden');
-                
-                const total = currentQuizData.length;
-                const answered = Object.keys(userAnswers).length;
-                
-                if (answered === total && total > 0) {
-                    showResultFooter(); 
-                } else { 
-                    quizFooter.classList.remove('hidden', 'footer-hidden'); 
-                    isFooterVisible = true; 
-                }
-                
-                renderQuestionGrid(total); 
-                
-                // Khôi phục trạng thái nút điều hướng
-                Object.keys(userAnswers).forEach(idx => {
-                    const navBtn = document.getElementById(`q-nav-${idx}`);
-                    if (navBtn) navBtn.classList.add('answered', 'text-white', 'border-blue-600');
-                });
-                
-                updateProgress(); 
-                renderQuizForTaking(currentQuizData);
+window.resumeSavedQuiz = function() {
+    try {
+        const saved = localStorage.getItem('quiz_progress'); 
+        if (!saved) return;
+        
+        const data = JSON.parse(saved); 
+        currentQuizData = data.questions || []; 
+        userAnswers = data.answers || {};
+        if (data.images) Object.assign(localImages, data.images); 
+        
+        document.getElementById('take-title').textContent = data.title || "Bài thi";
+        document.getElementById('upload-area').classList.add('hidden'); 
+        document.getElementById('quiz-area').classList.remove('hidden'); 
+        resumeAlert.classList.add('hidden');
+        
+        const total = currentQuizData.length;
+        const answered = Object.keys(userAnswers).length;
+        
+        // CHỈ HIỂN THỊ FOOTER NẾU ĐÃ LÀM XONG HẾT CÂU HỎI
+        if (answered === total && total > 0) {
+            showResultFooter(); 
+        } else { 
+            // Nếu chưa xong, đảm bảo footer bị ẩn
+            quizFooter.classList.add('hidden'); 
+            isFooterVisible = false; 
+        }
+        
+        renderQuestionGrid(total); 
+        Object.keys(userAnswers).forEach(idx => {
+            const navBtn = document.getElementById(`q-nav-${idx}`);
+            if (navBtn) navBtn.classList.add('answered');
+        });
+        
+        updateProgress(); 
+        renderQuizForTaking(currentQuizData);
 
-                // Phục hồi vị trí cuộn chuột an toàn
-                if (data.scrollPosition) {
-                    setTimeout(() => {
-                        const scrollContainer = document.getElementById('quiz-scroll-container');
-                        if (scrollContainer) scrollContainer.scrollTop = data.scrollPosition;
-                    }, 100); 
-                }
-            } catch(e) {
-                console.error("Lỗi sập cấu trúc khi phục hồi bài thi:", e);
-                alert("Dữ liệu lưu tạm bị hỏng nên không thể khôi phục tự động. Vui lòng bắt đầu lại.");
-                window.resetQuiz(); // Xóa rác và cho phép thi lại
-            }
-        };
+        if (data.scrollPosition) {
+            setTimeout(() => {
+                const scrollContainer = document.getElementById('quiz-scroll-container');
+                if (scrollContainer) scrollContainer.scrollTop = data.scrollPosition;
+            }, 100); 
+        }
+    } catch(e) {
+        console.error("Lỗi phục hồi bài thi:", e);
+        window.resetQuiz();
+    }
+};
 
         function startQuiz(data) {
-            let qs = JSON.parse(JSON.stringify(data.questions));
-            
-            // Xử lý xáo trộn an toàn
-            qs.forEach(q => {
-                if (q.options) {
-                    if (isShuffleEnabled) q.options = window.shuffleArray(q.options);
-                    q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx));
-                }
-            });
-            if (isShuffleEnabled) qs = window.shuffleArray(qs);
-            
-            currentQuizData = qs; userAnswers = {};
-            document.getElementById('take-title').textContent = data.title || "Bài tập";
-            
-            // Cập nhật giao diện
-            document.getElementById('upload-area').classList.add('hidden'); 
-            document.getElementById('quiz-area').classList.remove('hidden');
-            resumeAlert.classList.add('hidden');
-            quizFooter.classList.remove('hidden', 'footer-hidden'); 
-            isFooterVisible = true;
-            
-            renderQuestionGrid(qs.length); 
-            updateProgress(); 
-            renderQuizForTaking(qs);
+    let qs = JSON.parse(JSON.stringify(data.questions));
+    if (isShuffleEnabled) {
+        qs.forEach(q => {
+            if (q.options) q.options = window.shuffleArray(q.options);
+            q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx));
+        });
+        qs = window.shuffleArray(qs);
+    }
+    
+    currentQuizData = qs; 
+    userAnswers = {};
+    document.getElementById('take-title').textContent = data.title || "Bài tập";
+    document.getElementById('upload-area').classList.add('hidden'); 
+    document.getElementById('quiz-area').classList.remove('hidden');
+    resumeAlert.classList.add('hidden');
 
-            // Ghi nhận ngay tiến trình vừa tạo
-            window.safeSaveProgress();
-        }
+    // Đã xóa phần hiển thị footer ở đây
+
+    renderQuestionGrid(qs.length); 
+    updateProgress(); 
+    renderQuizForTaking(qs);
+    window.safeSaveProgress();
+}
 
         window.pauseQuiz = function() { 
             window.safeSaveProgress(); // Cập nhật trạng thái trước khi thoát

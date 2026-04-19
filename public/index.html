@@ -882,11 +882,43 @@
             try {
                 localStorage.setItem('quiz_draft_title', quizTitleInput.value);
                 localStorage.setItem('quiz_draft_content', editor.value);
-                localStorage.setItem('quiz_draft_images', JSON.stringify(localImages)); 
+                
+                // Chỉ lưu những ảnh thực sự có trong văn bản để tránh "ảnh ma"
+                const usedImages = {};
+                const imgRegex = /\[img:(.*?)\]/g;
+                let match;
+                while ((match = imgRegex.exec(editor.value)) !== null) {
+                    const imgId = match[1];
+                    if (localImages[imgId]) usedImages[imgId] = localImages[imgId];
+                }
+                localStorage.setItem('quiz_draft_images', JSON.stringify(usedImages));
+                
+                // Hiển thị trạng thái lưu
+                draftStatus.textContent = "Đã lưu nháp";
+                draftStatus.classList.remove('hidden');
+                setTimeout(() => { if(draftStatus.textContent === "Đã lưu nháp") draftStatus.classList.add('hidden'); }, 2000);
             } catch(e) {
                 console.warn("Dung lượng nháp quá lớn, không thể lưu bộ nhớ đệm.");
             }
-            draftStatus.classList.remove('hidden'); setTimeout(() => draftStatus.classList.add('hidden'), 2000);
+        };
+
+        window.loadDraft = function() {
+            const dt = localStorage.getItem('quiz_draft_title');
+            const dc = localStorage.getItem('quiz_draft_content');
+            const di = localStorage.getItem('quiz_draft_images');
+            
+            if (dt !== null) quizTitleInput.value = dt;
+            if (di !== null) {
+                try { 
+                    const parsedImg = JSON.parse(di);
+                    Object.assign(localImages, parsedImg); 
+                } catch(e) {}
+            }
+            if (dc !== null) {
+                editor.value = dc;
+                // Quan trọng: Phải render lại giao diện sau khi tải dữ liệu
+                renderPreview(); 
+            }
         };
 
 window.saveQuiz = function() {

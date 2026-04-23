@@ -1417,7 +1417,24 @@ window.resumeSavedQuiz = function() {
             const wqs = currentQuizData.filter((q, i) => userAnswers[i] === 'wrong' || userAnswers[i]?.status === 'wrong');
             if (wqs.length === 0) return alert("Không có câu sai!");
             const t = "ON_TAP_SAI_" + document.getElementById('take-title').textContent;
-            const blob = new Blob([JSON.stringify({title: t, questions: wqs, images: localImages}, null, 2)], { type: 'application/json' });
+            
+            // --- BẮT ĐẦU SỬA LỖI: Chỉ lọc những ảnh thực sự có trong các câu sai ---
+            const usedImages = {};
+            const imgRegex = /\[img:(.*?)\]/g;
+            const wqsString = JSON.stringify(wqs); // Chuyển các câu sai thành chuỗi để tìm mã ảnh
+            let match;
+            
+            while ((match = imgRegex.exec(wqsString)) !== null) {
+                const imgId = match[1];
+                // Chỉ copy những ảnh có mã xuất hiện trong câu sai
+                if (localImages[imgId]) {
+                    usedImages[imgId] = localImages[imgId];
+                }
+            }
+            // --- KẾT THÚC SỬA LỖI ---
+
+            // Đổi `images: localImages` thành `images: usedImages`
+            const blob = new Blob([JSON.stringify({title: t, questions: wqs, images: usedImages}, null, 2)], { type: 'application/json' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = t.replace(/[^a-z0-9]/gi, '_') + ".json";
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };

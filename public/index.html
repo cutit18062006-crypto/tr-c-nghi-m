@@ -433,7 +433,7 @@
         // ------------------------------------------------------------------
         // TRÌNH PHÂN TÍCH SOẠN THẢO (PARSER)
         // ------------------------------------------------------------------
-        function parseEditorContent() {
+       function parseEditorContent() {
             const text = editor.value;
             const lines = text.split('\n'); 
             const questions = [];
@@ -441,13 +441,17 @@
             let charCount = 0; 
 
             const qStartRegex = /^((?:Câu|Question|Bài)\s+(\d+)[:.]?\s*|(\d+)[\.:]\s*)/i;
+            // Regex tìm ký tự bắt đầu đáp án (VD: A., *B., C., *D.)
+            // Có dấu phân cách (chấm) và theo sau là dấu cách hoặc chữ.
+            const optionStartRegex = /(\*)?([A-D])\.\s+/g; 
 
             lines.forEach(line => {
                 const lineStartIndex = charCount;
                 charCount += line.length + 1; 
-                const trimmed = line.trim();
+                let trimmed = line.trim();
                 if(!trimmed) return; 
 
+                // Kiểm tra xem dòng này có phải là Câu hỏi mới không
                 if (qStartRegex.test(trimmed)) {
                     if (currentQ) { currentQ.options.forEach(o => o.text = o.text.trim()); questions.push(currentQ); }
                     const match = trimmed.match(qStartRegex);
@@ -460,18 +464,59 @@
                     };
                     return;
                 }
+
                 if (!currentQ) currentQ = { originalPrefix: "Câu :", visualNumber: -1, cleanText: "", questionText: "", options: [], state: 'question', nextExpectedLabel: 'A', startIndex: lineStartIndex };
 
-                const optMatch = trimmed.match(/^(\*)?([a-dA-D])\.(.*)/);
-                if (optMatch) {
-                    const foundLabel = optMatch[2].toUpperCase();
-                    if (foundLabel === currentQ.nextExpectedLabel) {
-                        currentQ.state = 'option';
-                        currentQ.options.push({ label: foundLabel, text: optMatch[3].trim(), correct: !!optMatch[1] });
+                // LOGIC MỚI: TÌM VÀ CẮT CÁC ĐÁP ÁN NẰM CHUNG 1 DÒNG
+                let matches = [];
+                let m;
+                // Tìm tất cả các cụm "A.", "B.", v.v... trong dòng
+                while ((m = optionStartRegex.exec(trimmed)) !== null) {
+                    const label = m[2].toUpperCase();
+                    // Chỉ cắt nếu label khớp với thứ tự đang chờ (VD: đang chờ C mà thấy C. thì mới cắt)
+                    if (label === currentQ.nextExpectedLabel) {
+                        matches.push({
+                            index: m.index,
+                            matchLength: m[0].length,
+                            isCorrect: !!m[1],
+                            label: label
+                        });
                         currentQ.nextExpectedLabel = String.fromCharCode(currentQ.nextExpectedLabel.charCodeAt(0) + 1);
-                    } else { appendToCurrent(currentQ, trimmed); }
-                } else { appendToCurrent(currentQ, trimmed); }
+                    }
+                }
+
+                // Nếu trong dòng này có chứa đáp án (1 hoặc nhiều)
+                if (matches.length > 0) {
+                    currentQ.state = 'option';
+                    
+                    // Nếu trước khi gặp đáp án đầu tiên trên dòng này còn có chữ, thì chữ đó thuộc về câu hỏi
+                    if (matches[0].index > 0) {
+                        const leftoverQuestionText = trimmed.substring(0, matches[0].index).trim();
+                        if (leftoverQuestionText) {
+                            appendToCurrent(currentQ, leftoverQuestionText);
+                        }
+                    }
+
+                    // Tách từng phần đáp án ra
+                    for (let i = 0; i < matches.length; i++) {
+                        const startExtract = matches[i].index + matches[i].matchLength;
+                        const endExtract = (i + 1 < matches.length) ? matches[i + 1].index : trimmed.length;
+                        
+                        const optionText = trimmed.substring(startExtract, endExtract).trim();
+                        
+                        currentQ.options.push({
+                            label: matches[i].label,
+                            text: optionText,
+                            correct: matches[i].isCorrect
+                        });
+                    }
+                } 
+                // Nếu dòng này không chứa cụm "A.", "B." nào, thì nó nối tiếp vào câu hỏi hoặc đáp án trước đó
+                else { 
+                    appendToCurrent(currentQ, trimmed); 
+                }
             });
+
             if (currentQ) { currentQ.options.forEach(o => o.text = o.text.trim()); questions.push(currentQ); }
             return questions;
         }

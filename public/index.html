@@ -1067,15 +1067,10 @@ window.saveQuiz = function() {
                         draftStatus.textContent = `Chuẩn bị tải ${totalImages} ảnh...`;
                     }
 
-                    // Hàm upload 1 ảnh (Có tích hợp cơ chế tự động thử lại nếu mạng lag)
-                    // Hàm upload 1 ảnh (Đã nâng cấp để ép kiểu ảnh Toán học WMF/EMF)
-                    const uploadImage = async (base64Data, retries = 2) => {
-                        // Bỏ qua nếu ảnh rỗng
+                    // Hàm upload 1 ảnh, xử lý lỗi công thức toán WMF/EMF
+                    const uploadImage = async (base64Data, retries = 3) => {
                         if (!base64Data || base64Data === '') return ' [Lỗi ảnh rỗng] ';
 
-                        // MẸO: Trị lỗi ảnh công thức Toán (MathType/Equation)
-                        // Nếu file Word nhả ra định dạng lạ (WMF/EMF) hoặc không có định dạng, 
-                        // ta sẽ "lừa" Cloudinary rằng đây là file PNG để nó chịu nhận và tự động chuyển đổi.
                         let safeBase64 = base64Data;
                         if (safeBase64.includes('image/x-wmf') || safeBase64.includes('image/x-emf') || safeBase64.startsWith('data:;base64,')) {
                             safeBase64 = safeBase64.replace(/^data:.*?;base64,/, 'data:image/png;base64,');
@@ -1093,43 +1088,41 @@ window.saveQuiz = function() {
                                 });
                                 if (!res.ok) throw new Error('API Error');
                                 const data = await res.json();
-                                // Ép Cloudinary trả về đuôi .png (để trình duyệt chắc chắn đọc được)
                                 if (data.secure_url) {
                                     let finalUrl = data.secure_url;
+                                    // Thay đuôi wmf/emf thành png trong link để Cloudinary trả về ảnh hiển thị được
                                     finalUrl = finalUrl.replace(/\.wmf$/i, '.png').replace(/\.emf$/i, '.png');
                                     return ` [img:${finalUrl}] `; 
                                 }
                             } catch (err) {
                                 if (i === retries - 1) return ' [Lỗi tải ảnh] ';
+                                // Đợi 1 giây trước khi thử lại để mạng ổn định
+                                await new Promise(resolve => setTimeout(resolve, 1000));
                             }
                         }
                         return ' [Lỗi tải ảnh] ';
                     };
 
-                    // THUẬT TOÁN CHIA LÔ (BATCH PROCESSING) ĐỂ CHỐNG QUÁ TẢI
-                    const BATCH_SIZE = 5; // Cứ 5 ảnh tải cùng 1 lúc
+                    // THUẬT TOÁN TẢI TUẦN TỰ (TỪNG ẢNH MỘT)
                     let successCount = 0;
-
-                    for (let i = 0; i < totalImages; i += BATCH_SIZE) {
-                        const batch = images.slice(i, i + BATCH_SIZE);
+                    
+                    // Dùng vòng lặp for...of để đợi từng ảnh tải xong mới lặp tiếp
+                    for (const img of images) {
+                        const base64Data = img.src;
                         
-                        // Đợi lô 5 ảnh này tải xong
-                        await Promise.all(batch.map(async (img) => {
-                            const base64Data = img.src;
-                            const imgTag = await uploadImage(base64Data);
-                            
-                            // Thay thế thẻ img bằng link
-                            const textNode = document.createTextNode(imgTag);
-                            img.parentNode.replaceChild(textNode, img);
-                            
-                            successCount++;
-                        }));
-
-                        // Cập nhật % tiến độ cho người dùng xem
-                        draftStatus.textContent = `Đang tải ảnh: ${successCount}/${totalImages}...`;
+                        // Cập nhật trạng thái cho người dùng thấy nó đang chạy
+                        draftStatus.textContent = `Đang tải ảnh: ${successCount + 1} / ${totalImages}...`;
+                        
+                        // Lệnh await ở đây ép trình duyệt phải đứng đợi kết quả
+                        const imgTag = await uploadImage(base64Data);
+                        
+                        const textNode = document.createTextNode(imgTag);
+                        img.parentNode.replaceChild(textNode, img);
+                        
+                        successCount++;
                     }
 
-                    // Chuyển đổi về Text (Thay thẻ p và br bằng dấu xuống dòng)
+                    // Chuyển HTML thành Text
                     let processedHtml = tempDiv.innerHTML;
                     processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
                     processedHtml = processedHtml.replace(/<br\s*[\/]?>/gi, '\n');
@@ -1147,7 +1140,7 @@ window.saveQuiz = function() {
                     e.target.value = '';
 
                 }).catch(err => {
-                    alert("Lỗi đọc Word: " + err.message);
+                    alert("Lỗi xử lý file Word: " + err.message);
                     draftStatus.classList.add('hidden');
                 });
             };

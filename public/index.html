@@ -402,24 +402,25 @@
             return s;
         };
 
-       window.formatContent = function(text) {
-            if(!text) return "";
-            return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
-                let src = "";
-                let cleanId = p1.trim(); // Xóa dấu cách thừa nếu có
-                
-                if (cleanId.startsWith('http')) {
-                    src = cleanId;
-                } else if (localImages[cleanId]) {
-                    src = localImages[cleanId];
-                } else {
-                    src = "images/" + cleanId;
-                }
-                
-                // Đã xóa lệnh onerror='display:none' để ảnh không bị tàng hình nữa
-                return `<img src="${src}" class="quiz-image" alt="[Ảnh: ${cleanId}]" />`;
-            });
-        };
+        window.formatContent = function(text) {
+    if(!text) return "";
+    return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
+        let src = "";
+        // Nếu là link ảnh từ mạng (Cloudinary)
+        if (p1.startsWith('http')) {
+            src = p1;
+        } 
+        // Nếu là ảnh lưu tạm Base64
+        else if (localImages[p1]) {
+            src = localImages[p1];
+        } 
+        // Nếu là ảnh trong folder public/images
+        else {
+            src = "images/" + p1;
+        }
+        return `<img src="${src}" class="quiz-image" alt="Hình ảnh" onerror="this.style.display='none'"/>`;
+    });
+};
 
         function renderMath(element) {
             if (!window.renderMathInElement) return;
@@ -442,7 +443,7 @@
             const qStartRegex = /^((?:Câu|Question|Bài)\s+(\d+)[:.]?\s*|(\d+)[\.:]\s*)/i;
             // Regex tìm ký tự bắt đầu đáp án (VD: A., *B., C., *D.)
             // Có dấu phân cách (chấm) và theo sau là dấu cách hoặc chữ.
-            const optionStartRegex = /(\*)?([A-D])\.[\s]*/g;
+            const optionStartRegex = /(\*)?([A-D])\.\s+/g; 
 
             lines.forEach(line => {
                 const lineStartIndex = charCount;
@@ -1002,62 +1003,116 @@ window.saveQuiz = function() {
 };
 
         editor.addEventListener('paste', (event) => {
-            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-            for (let index in items) {
-                const item = items[index];
-                if (item.kind === 'file' && item.type.includes('image/')) {
-                    event.preventDefault();
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        // Không cần Cloudinary nữa, lưu thẳng vào bộ nhớ Offline
-                        const base64Data = e.target.result;
-                        const imgId = 'img_paste_' + Date.now();
-                        
-                        localImages[imgId] = base64Data; // Lưu vào biến tạm
-                        
+    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.includes('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            
+            // Hiển thị thông báo đang xử lý
+            draftStatus.textContent = "Đang tải ảnh lên mạng...";
+            draftStatus.classList.remove('hidden');
+
+            reader.onload = function(e) {
+                const formData = new FormData();
+                formData.append('file', e.target.result);
+                formData.append('upload_preset', 'oqpr62fq'); // <--- THAY VÀO ĐÂY
+
+                fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', { // <--- THAY VÀO ĐÂY
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.secure_url) {
+                        const imgTag = `[img:${data.secure_url}]`;
                         const start = editor.selectionStart, end = editor.selectionEnd;
-                        editor.setRangeText(`[img:${imgId}]`, start, end, 'end');
+                        editor.setRangeText(imgTag, start, end, 'end');
                         
-                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
-                    };
-                    reader.readAsDataURL(item.getAsFile());
-                }
-            }
-        });
+                        draftStatus.textContent = "Tải ảnh thành công!";
+                        setTimeout(() => draftStatus.classList.add('hidden'), 2000);
+                        
+                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
+                    }
+                })
+                .catch(err => {
+                    alert("Lỗi tải ảnh lên Cloudinary!");
+                    draftStatus.classList.add('hidden');
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+});
 
        document.getElementById('word-upload').addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;
             
-            draftStatus.textContent = "Đang trích xuất Word & Ảnh (Offline)..."; 
+            draftStatus.textContent = "Đang trích xuất dữ liệu từ Word..."; 
             draftStatus.classList.remove('hidden');
             
             const reader = new FileReader();
             reader.onload = function(event) {
-                mammoth.convertToHtml({arrayBuffer: event.target.result}).then(function(result) {
+                mammoth.convertToHtml({arrayBuffer: event.target.result}).then(async function(result) {
                     const html = result.value;
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = html;
 
                     const images = Array.from(tempDiv.querySelectorAll('img'));
+                    const totalImages = images.length;
                     
-                    // Xử lý toàn bộ ảnh lưu thẳng vào bộ nhớ, không cần mạng
-                    images.forEach((img, index) => {
-                        let base64Data = img.src;
-                        
-                        // Đổi chuẩn ảnh Vector của Word sang PNG để trình duyệt hiển thị được
-                        if (base64Data.includes('image/x-wmf') || base64Data.includes('image/x-emf')) {
-                            base64Data = base64Data.replace(/^data:.*?;base64,/, 'data:image/png;base64,');
+                    if (totalImages > 0) {
+                        draftStatus.textContent = `Chuẩn bị tải ${totalImages} ảnh...`;
+                    }
+
+                    // Hàm upload 1 ảnh (Có tích hợp cơ chế tự động thử lại nếu mạng lag)
+                    const uploadImage = async (base64Data, retries = 2) => {
+                        const formData = new FormData();
+                        formData.append('file', base64Data);
+                        formData.append('upload_preset', 'oqpr62fq'); 
+
+                        for (let i = 0; i < retries; i++) {
+                            try {
+                                const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (!res.ok) throw new Error('API Error');
+                                const data = await res.json();
+                                if (data.secure_url) return ` [img:${data.secure_url}] `; // Thêm dấu cách 2 bên để an toàn
+                            } catch (err) {
+                                if (i === retries - 1) return ' [Lỗi tải ảnh] ';
+                            }
                         }
+                        return ' [Lỗi tải ảnh] ';
+                    };
 
-                        const imgId = 'img_word_' + Date.now() + '_' + index;
-                        localImages[imgId] = base64Data; // Lưu vào biến tạm
+                    // THUẬT TOÁN CHIA LÔ (BATCH PROCESSING) ĐỂ CHỐNG QUÁ TẢI
+                    const BATCH_SIZE = 5; // Cứ 5 ảnh tải cùng 1 lúc
+                    let successCount = 0;
+
+                    for (let i = 0; i < totalImages; i += BATCH_SIZE) {
+                        const batch = images.slice(i, i + BATCH_SIZE);
                         
-                        const textNode = document.createTextNode(` [img:${imgId}] `);
-                        img.parentNode.replaceChild(textNode, img);
-                    });
+                        // Đợi lô 5 ảnh này tải xong
+                        await Promise.all(batch.map(async (img) => {
+                            const base64Data = img.src;
+                            const imgTag = await uploadImage(base64Data);
+                            
+                            // Thay thế thẻ img bằng link
+                            const textNode = document.createTextNode(imgTag);
+                            img.parentNode.replaceChild(textNode, img);
+                            
+                            successCount++;
+                        }));
 
-                    // Chuyển HTML thành Text
+                        // Cập nhật % tiến độ cho người dùng xem
+                        draftStatus.textContent = `Đang tải ảnh: ${successCount}/${totalImages}...`;
+                    }
+
+                    // Chuyển đổi về Text (Thay thẻ p và br bằng dấu xuống dòng)
                     let processedHtml = tempDiv.innerHTML;
                     processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
                     processedHtml = processedHtml.replace(/<br\s*[\/]?>/gi, '\n');
@@ -1070,12 +1125,12 @@ window.saveQuiz = function() {
                     
                     if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
                     
-                    showToast(images.length > 0 ? `Hoàn tất! Nhập Word kèm ${images.length} ảnh.` : "Đã nhập Text từ file Word!");
+                    showToast(totalImages > 0 ? `Hoàn tất! Đã nhập Word & ${totalImages} ảnh.` : "Đã nhập Text từ file Word!");
                     draftStatus.classList.add('hidden');
                     e.target.value = '';
 
                 }).catch(err => {
-                    alert("Lỗi xử lý file Word: " + err.message);
+                    alert("Lỗi đọc Word: " + err.message);
                     draftStatus.classList.add('hidden');
                 });
             };

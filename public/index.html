@@ -1067,37 +1067,49 @@ window.saveQuiz = function() {
                         draftStatus.textContent = `Chuẩn bị tải ${totalImages} ảnh...`;
                     }
 
-                    // Hàm upload 1 ảnh, xử lý lỗi công thức toán WMF/EMF
-                    const uploadImage = async (base64Data, retries = 3) => {
+                   // Hàm upload 1 ảnh (Phiên bản Thử Sai Đa Định Dạng)
+                    const uploadImage = async (base64Data) => {
                         if (!base64Data || base64Data === '') return ' [Lỗi ảnh rỗng] ';
 
-                        let safeBase64 = base64Data;
-                        if (safeBase64.includes('image/x-wmf') || safeBase64.includes('image/x-emf') || safeBase64.startsWith('data:;base64,')) {
-                            safeBase64 = safeBase64.replace(/^data:.*?;base64,/, 'data:image/png;base64,');
-                        }
+                        // Tạo ra 3 phiên bản mã hóa để lừa Cloudinary nếu nó từ chối
+                        const formatsToTry = [
+                            base64Data, // Thử lần 1: Gửi nguyên bản (WMF/EMF)
+                            base64Data.replace(/^data:.*?;base64,/, 'data:image/png;base64,'), // Thử lần 2: Ép kiểu PNG
+                            base64Data.replace(/^data:.*?;base64,/, 'data:auto;base64,') // Thử lần 3: Kiểu tự động
+                        ];
 
-                        const formData = new FormData();
-                        formData.append('file', safeBase64);
-                        formData.append('upload_preset', 'oqpr62fq'); 
+                        for (let format of formatsToTry) {
+                            // Mỗi phiên bản thử gửi 2 lần (phòng rớt mạng)
+                            for (let i = 0; i < 2; i++) {
+                                try {
+                                    const formData = new FormData();
+                                    formData.append('file', format);
+                                    formData.append('upload_preset', 'oqpr62fq'); 
 
-                        for (let i = 0; i < retries; i++) {
-                            try {
-                                const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                                if (!res.ok) throw new Error('API Error');
-                                const data = await res.json();
-                                if (data.secure_url) {
-                                    let finalUrl = data.secure_url;
-                                    // Thay đuôi wmf/emf thành png trong link để Cloudinary trả về ảnh hiển thị được
-                                    finalUrl = finalUrl.replace(/\.wmf$/i, '.png').replace(/\.emf$/i, '.png');
-                                    return ` [img:${finalUrl}] `; 
+                                    // LƯU Ý QUAN TRỌNG: Dùng /auto/upload thay vì /image/upload
+                                    // Điều này ép Cloudinary nhận mọi thể loại file (kể cả file rác từ Word)
+                                    const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/auto/upload', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+                                    
+                                    const data = await res.json();
+                                    
+                                    // Nếu upload thành công
+                                    if (data.secure_url) {
+                                        let finalUrl = data.secure_url;
+                                        // Đuôi ảnh vector lên web sẽ bị tàng hình, phải ép nó đổi đuôi thành PNG
+                                        if (finalUrl.match(/\.(wmf|emf)$/i)) {
+                                            finalUrl = finalUrl.replace(/\.(wmf|emf)$/i, '.png');
+                                        }
+                                        return ` [img:${finalUrl}] `; 
+                                    } else {
+                                        // Bắn lỗi ra Console (F12) để bác sĩ bắt bệnh nếu vẫn xịt
+                                        console.error("Cloudinary chê ảnh này:", data);
+                                    }
+                                } catch (err) {
+                                    await new Promise(resolve => setTimeout(resolve, 500)); // Đợi nửa giây rồi gửi lại
                                 }
-                            } catch (err) {
-                                if (i === retries - 1) return ' [Lỗi tải ảnh] ';
-                                // Đợi 1 giây trước khi thử lại để mạng ổn định
-                                await new Promise(resolve => setTimeout(resolve, 1000));
                             }
                         }
                         return ' [Lỗi tải ảnh] ';

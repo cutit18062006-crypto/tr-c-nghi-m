@@ -1067,49 +1067,44 @@ window.saveQuiz = function() {
                         draftStatus.textContent = `Chuẩn bị tải ${totalImages} ảnh...`;
                     }
 
-                   // Hàm upload 1 ảnh (Phiên bản Thử Sai Đa Định Dạng)
+                   // Hàm upload 1 ảnh (Đã sửa lỗi hiển thị ảnh RAW)
                     const uploadImage = async (base64Data) => {
                         if (!base64Data || base64Data === '') return ' [Lỗi ảnh rỗng] ';
 
-                        // Tạo ra 3 phiên bản mã hóa để lừa Cloudinary nếu nó từ chối
-                        const formatsToTry = [
-                            base64Data, // Thử lần 1: Gửi nguyên bản (WMF/EMF)
-                            base64Data.replace(/^data:.*?;base64,/, 'data:image/png;base64,'), // Thử lần 2: Ép kiểu PNG
-                            base64Data.replace(/^data:.*?;base64,/, 'data:auto;base64,') // Thử lần 3: Kiểu tự động
-                        ];
+                        // MẤU CHỐT 1: Xóa tên định dạng bị lỗi của Word
+                        // Thay vì nói dối là PNG (bị Cloudinary bắt lỗi), ta xóa hẳn tên định dạng đi
+                        // để Cloudinary tự động "đọc lõi" mã nhị phân bên trong.
+                        let processBase64 = base64Data;
+                        if (processBase64.includes('image/x-wmf') || processBase64.includes('image/x-emf')) {
+                            processBase64 = processBase64.replace(/^data:.*?;base64,/, 'data:;base64,');
+                        }
 
-                        for (let format of formatsToTry) {
-                            // Mỗi phiên bản thử gửi 2 lần (phòng rớt mạng)
-                            for (let i = 0; i < 2; i++) {
-                                try {
-                                    const formData = new FormData();
-                                    formData.append('file', format);
-                                    formData.append('upload_preset', 'oqpr62fq'); 
-
-                                    // LƯU Ý QUAN TRỌNG: Dùng /auto/upload thay vì /image/upload
-                                    // Điều này ép Cloudinary nhận mọi thể loại file (kể cả file rác từ Word)
-                                    const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/auto/upload', {
-                                        method: 'POST',
-                                        body: formData
-                                    });
-                                    
-                                    const data = await res.json();
-                                    
-                                    // Nếu upload thành công
-                                    if (data.secure_url) {
-                                        let finalUrl = data.secure_url;
-                                        // Đuôi ảnh vector lên web sẽ bị tàng hình, phải ép nó đổi đuôi thành PNG
-                                        if (finalUrl.match(/\.(wmf|emf)$/i)) {
-                                            finalUrl = finalUrl.replace(/\.(wmf|emf)$/i, '.png');
-                                        }
-                                        return ` [img:${finalUrl}] `; 
-                                    } else {
-                                        // Bắn lỗi ra Console (F12) để bác sĩ bắt bệnh nếu vẫn xịt
-                                        console.error("Cloudinary chê ảnh này:", data);
-                                    }
-                                } catch (err) {
-                                    await new Promise(resolve => setTimeout(resolve, 500)); // Đợi nửa giây rồi gửi lại
+                        for (let i = 0; i < 2; i++) { 
+                            try {
+                                const formData = new FormData();
+                                formData.append('file', processBase64);
+                                formData.append('upload_preset', 'oqpr62fq'); 
+                                
+                                // MẤU CHỐT 2: Quay lại cổng image/upload (Bắt buộc phải là cổng này thì mới hiện ảnh được)
+                                const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                
+                                const data = await res.json();
+                                
+                                if (data.secure_url) {
+                                    let finalUrl = data.secure_url;
+                                    // MẤU CHỐT 3: Bắt ép Cloudinary phải xuất ra ảnh PNG
+                                    // Bất kể nó lưu định dạng gì (wmf, emf...), cứ đổi đuôi link thành .png 
+                                    // thì máy chủ Cloudinary sẽ tự động dịch nó sang ảnh chuẩn trên web.
+                                    finalUrl = finalUrl.replace(/\.[^/.]+$/, ".png");
+                                    return ` [img:${finalUrl}] `; 
+                                } else {
+                                    console.error("Lỗi từ Cloudinary:", data);
                                 }
+                            } catch (err) {
+                                await new Promise(resolve => setTimeout(resolve, 1000)); 
                             }
                         }
                         return ' [Lỗi tải ảnh] ';

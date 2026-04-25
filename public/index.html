@@ -1003,131 +1003,60 @@ window.saveQuiz = function() {
 };
 
         editor.addEventListener('paste', (event) => {
-    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-    for (let index in items) {
-        const item = items[index];
-        if (item.kind === 'file' && item.type.includes('image/')) {
-            event.preventDefault();
-            const file = item.getAsFile();
-            const reader = new FileReader();
-            
-            // Hiển thị thông báo đang xử lý
-            draftStatus.textContent = "Đang tải ảnh lên mạng...";
-            draftStatus.classList.remove('hidden');
-
-            reader.onload = function(e) {
-                const formData = new FormData();
-                formData.append('file', e.target.result);
-                formData.append('upload_preset', 'oqpr62fq'); // <--- THAY VÀO ĐÂY
-
-                fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', { // <--- THAY VÀO ĐÂY
-                    method: 'POST',
-                    body: formData
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.secure_url) {
-                        const imgTag = `[img:${data.secure_url}]`;
+            const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+            for (let index in items) {
+                const item = items[index];
+                if (item.kind === 'file' && item.type.includes('image/')) {
+                    event.preventDefault();
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        // Không cần Cloudinary nữa, lưu thẳng vào bộ nhớ Offline
+                        const base64Data = e.target.result;
+                        const imgId = 'img_paste_' + Date.now();
+                        
+                        localImages[imgId] = base64Data; // Lưu vào biến tạm
+                        
                         const start = editor.selectionStart, end = editor.selectionEnd;
-                        editor.setRangeText(imgTag, start, end, 'end');
+                        editor.setRangeText(`[img:${imgId}]`, start, end, 'end');
                         
-                        draftStatus.textContent = "Tải ảnh thành công!";
-                        setTimeout(() => draftStatus.classList.add('hidden'), 2000);
-                        
-                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
-                    }
-                })
-                .catch(err => {
-                    alert("Lỗi tải ảnh lên Cloudinary!");
-                    draftStatus.classList.add('hidden');
-                });
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-});
+                        if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
+                    };
+                    reader.readAsDataURL(item.getAsFile());
+                }
+            }
+        });
 
        document.getElementById('word-upload').addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;
             
-            draftStatus.textContent = "Đang trích xuất dữ liệu từ Word..."; 
+            draftStatus.textContent = "Đang trích xuất Word & Ảnh (Offline)..."; 
             draftStatus.classList.remove('hidden');
             
             const reader = new FileReader();
             reader.onload = function(event) {
-                mammoth.convertToHtml({arrayBuffer: event.target.result}).then(async function(result) {
+                mammoth.convertToHtml({arrayBuffer: event.target.result}).then(function(result) {
                     const html = result.value;
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = html;
 
                     const images = Array.from(tempDiv.querySelectorAll('img'));
-                    const totalImages = images.length;
                     
-                    if (totalImages > 0) {
-                        draftStatus.textContent = `Chuẩn bị tải ${totalImages} ảnh...`;
-                    }
-
-                   // Hàm upload 1 ảnh (Đã sửa lỗi hiển thị ảnh RAW)
-                    const uploadImage = async (base64Data) => {
-                        if (!base64Data || base64Data === '') return ' [Lỗi ảnh rỗng] ';
-
-                        // MẤU CHỐT 1: Xóa tên định dạng bị lỗi của Word
-                        // Thay vì nói dối là PNG (bị Cloudinary bắt lỗi), ta xóa hẳn tên định dạng đi
-                        // để Cloudinary tự động "đọc lõi" mã nhị phân bên trong.
-                        let processBase64 = base64Data;
-                        if (processBase64.includes('image/x-wmf') || processBase64.includes('image/x-emf')) {
-                            processBase64 = processBase64.replace(/^data:.*?;base64,/, 'data:;base64,');
+                    // Xử lý toàn bộ ảnh lưu thẳng vào bộ nhớ, không cần mạng
+                    images.forEach((img, index) => {
+                        let base64Data = img.src;
+                        
+                        // Đổi chuẩn ảnh Vector của Word sang PNG để trình duyệt hiển thị được
+                        if (base64Data.includes('image/x-wmf') || base64Data.includes('image/x-emf')) {
+                            base64Data = base64Data.replace(/^data:.*?;base64,/, 'data:image/png;base64,');
                         }
 
-                        for (let i = 0; i < 2; i++) { 
-                            try {
-                                const formData = new FormData();
-                                formData.append('file', processBase64);
-                                formData.append('upload_preset', 'oqpr62fq'); 
-                                
-                                // MẤU CHỐT 2: Quay lại cổng image/upload (Bắt buộc phải là cổng này thì mới hiện ảnh được)
-                                const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                                
-                                const data = await res.json();
-                                
-                                if (data.secure_url) {
-                                    let finalUrl = data.secure_url;
-                                    // MẤU CHỐT 3: Bắt ép Cloudinary phải xuất ra ảnh PNG
-                                    // Bất kể nó lưu định dạng gì (wmf, emf...), cứ đổi đuôi link thành .png 
-                                    // thì máy chủ Cloudinary sẽ tự động dịch nó sang ảnh chuẩn trên web.
-                                    finalUrl = finalUrl.replace(/\.[^/.]+$/, ".png");
-                                    return ` [img:${finalUrl}] `; 
-                                } else {
-                                    console.error("Lỗi từ Cloudinary:", data);
-                                }
-                            } catch (err) {
-                                await new Promise(resolve => setTimeout(resolve, 1000)); 
-                            }
-                        }
-                        return ' [Lỗi tải ảnh] ';
-                    };
-
-                    // THUẬT TOÁN TẢI TUẦN TỰ (TỪNG ẢNH MỘT)
-                    let successCount = 0;
-                    
-                    // Dùng vòng lặp for...of để đợi từng ảnh tải xong mới lặp tiếp
-                    for (const img of images) {
-                        const base64Data = img.src;
+                        const imgId = 'img_word_' + Date.now() + '_' + index;
+                        localImages[imgId] = base64Data; // Lưu vào biến tạm
                         
-                        // Cập nhật trạng thái cho người dùng thấy nó đang chạy
-                        draftStatus.textContent = `Đang tải ảnh: ${successCount + 1} / ${totalImages}...`;
-                        
-                        // Lệnh await ở đây ép trình duyệt phải đứng đợi kết quả
-                        const imgTag = await uploadImage(base64Data);
-                        
-                        const textNode = document.createTextNode(imgTag);
+                        const textNode = document.createTextNode(` [img:${imgId}] `);
                         img.parentNode.replaceChild(textNode, img);
-                        
-                        successCount++;
-                    }
+                    });
 
                     // Chuyển HTML thành Text
                     let processedHtml = tempDiv.innerHTML;
@@ -1142,7 +1071,7 @@ window.saveQuiz = function() {
                     
                     if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
                     
-                    showToast(totalImages > 0 ? `Hoàn tất! Đã nhập Word & ${totalImages} ảnh.` : "Đã nhập Text từ file Word!");
+                    showToast(images.length > 0 ? `Hoàn tất! Nhập Word kèm ${images.length} ảnh.` : "Đã nhập Text từ file Word!");
                     draftStatus.classList.add('hidden');
                     e.target.value = '';
 

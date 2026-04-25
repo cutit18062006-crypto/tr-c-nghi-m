@@ -402,25 +402,24 @@
             return s;
         };
 
-        window.formatContent = function(text) {
-    if(!text) return "";
-    return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
-        let src = "";
-        // Nếu là link ảnh từ mạng (Cloudinary)
-        if (p1.startsWith('http')) {
-            src = p1;
-        } 
-        // Nếu là ảnh lưu tạm Base64
-        else if (localImages[p1]) {
-            src = localImages[p1];
-        } 
-        // Nếu là ảnh trong folder public/images
-        else {
-            src = "images/" + p1;
-        }
-        return `<img src="${src}" class="quiz-image" alt="Hình ảnh" onerror="this.style.display='none'"/>`;
-    });
-};
+       window.formatContent = function(text) {
+            if(!text) return "";
+            return text.replace(/\[img:(.*?)\]/g, (match, p1) => {
+                let src = "";
+                let cleanId = p1.trim(); // Xóa dấu cách thừa nếu có
+                
+                if (cleanId.startsWith('http')) {
+                    src = cleanId;
+                } else if (localImages[cleanId]) {
+                    src = localImages[cleanId];
+                } else {
+                    src = "images/" + cleanId;
+                }
+                
+                // Đã xóa lệnh onerror='display:none' để ảnh không bị tàng hình nữa
+                return `<img src="${src}" class="quiz-image" alt="[Ảnh: ${cleanId}]" />`;
+            });
+        };
 
         function renderMath(element) {
             if (!window.renderMathInElement) return;

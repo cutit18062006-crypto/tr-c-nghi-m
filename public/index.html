@@ -1049,15 +1049,81 @@ window.saveQuiz = function() {
 
         document.getElementById('word-upload').addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;
-            draftStatus.textContent = "Đang xử lý Word..."; draftStatus.classList.remove('hidden');
+            
+            draftStatus.textContent = "Đang đọc file Word và xử lý ảnh..."; 
+            draftStatus.classList.remove('hidden');
+            
             const reader = new FileReader();
             reader.onload = function(event) {
-                mammoth.extractRawText({arrayBuffer: event.target.result}).then(function(result) {
-                    editor.value = (editor.value ? editor.value + "\n\n" : "") + result.value.trim();
+                // Thay vì dùng extractRawText, ta dùng convertToHtml để giữ lại ảnh
+                mammoth.convertToHtml({arrayBuffer: event.target.result}).then(async function(result) {
+                    const html = result.value;
+
+                    // Tạo một khung DOM ẩn để dễ dàng bóc tách ảnh
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+
+                    // Tìm tất cả các ảnh có trong file Word
+                    const images = Array.from(tempDiv.querySelectorAll('img'));
+                    
+                    if (images.length > 0) {
+                        draftStatus.textContent = `Đang tải ${images.length} ảnh lên mạng...`;
+                    }
+
+                    // Hàm phụ để upload 1 ảnh Base64 lên Cloudinary
+                    const uploadImageToCloudinary = async (base64Data) => {
+                        const formData = new FormData();
+                        formData.append('file', base64Data);
+                        formData.append('upload_preset', 'oqpr62fq'); // Preset của bạn
+
+                        try {
+                            const res = await fetch('https://api.cloudinary.com/v1_1/dzr83ctc5/image/upload', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            const data = await res.json();
+                            return data.secure_url ? `[img:${data.secure_url}]` : '[Lỗi tải ảnh]';
+                        } catch (err) {
+                            return '[Lỗi tải ảnh]';
+                        }
+                    };
+
+                    // Chờ tải tất cả ảnh lên Cloudinary cùng một lúc (Tăng tốc độ)
+                    const uploadPromises = images.map(async (img) => {
+                        const base64Data = img.src; // Lấy dữ liệu ảnh từ file Word
+                        const imgTag = await uploadImageToCloudinary(base64Data);
+                        
+                        // Thay thế thẻ <img> trong HTML bằng chuỗi text [img:link]
+                        const textNode = document.createTextNode("\n" + imgTag + "\n");
+                        img.parentNode.replaceChild(textNode, img);
+                    });
+
+                    await Promise.all(uploadPromises); // Đợi đến khi toàn bộ ảnh upload xong
+
+                    // Sau khi xử lý xong ảnh, chuyển HTML trở lại thành Text thuần túy
+                    // Chuyển thẻ <p> và <br> thành dấu xuống dòng để không bị dính chữ
+                    let processedHtml = tempDiv.innerHTML;
+                    processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
+                    processedHtml = processedHtml.replace(/<br\s*[\/]?>/gi, '\n');
+                    
+                    // Bỏ hết các thẻ HTML thừa thãi (như in đậm, in nghiêng...)
+                    const finalDiv = document.createElement('div');
+                    finalDiv.innerHTML = processedHtml;
+                    const finalText = finalDiv.textContent || finalDiv.innerText || "";
+
+                    // Đưa nội dung cuối cùng vào khung soạn thảo
+                    editor.value = (editor.value ? editor.value + "\n\n" : "") + finalText.trim();
+                    
                     if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
-                    showToast("Đã nhập Text từ file Word. (Không bao gồm ảnh. Nếu có ảnh, vui lòng copy-paste trực tiếp ảnh vào text)");
-                    e.target.value = '';
-                }).catch(err => alert("Lỗi đọc Word: " + err.message));
+                    
+                    showToast(images.length > 0 ? `Đã nhập Word kèm ${images.length} ảnh!` : "Đã nhập Text từ file Word!");
+                    draftStatus.classList.add('hidden');
+                    e.target.value = ''; // Reset input file
+
+                }).catch(err => {
+                    alert("Lỗi đọc Word: " + err.message);
+                    draftStatus.classList.add('hidden');
+                });
             };
             reader.readAsArrayBuffer(file);
         });

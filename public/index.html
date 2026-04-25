@@ -443,7 +443,7 @@
             const qStartRegex = /^((?:Câu|Question|Bài)\s+(\d+)[:.]?\s*|(\d+)[\.:]\s*)/i;
             // Regex tìm ký tự bắt đầu đáp án (VD: A., *B., C., *D.)
             // Có dấu phân cách (chấm) và theo sau là dấu cách hoặc chữ.
-            const optionStartRegex = /(\*)?([A-D])\.\s+/g; 
+            const optionStartRegex = /(\*)?([A-D])\.[\s]*/g;
 
             lines.forEach(line => {
                 const lineStartIndex = charCount;
@@ -1068,9 +1068,21 @@ window.saveQuiz = function() {
                     }
 
                     // Hàm upload 1 ảnh (Có tích hợp cơ chế tự động thử lại nếu mạng lag)
+                    // Hàm upload 1 ảnh (Đã nâng cấp để ép kiểu ảnh Toán học WMF/EMF)
                     const uploadImage = async (base64Data, retries = 2) => {
+                        // Bỏ qua nếu ảnh rỗng
+                        if (!base64Data || base64Data === '') return ' [Lỗi ảnh rỗng] ';
+
+                        // MẸO: Trị lỗi ảnh công thức Toán (MathType/Equation)
+                        // Nếu file Word nhả ra định dạng lạ (WMF/EMF) hoặc không có định dạng, 
+                        // ta sẽ "lừa" Cloudinary rằng đây là file PNG để nó chịu nhận và tự động chuyển đổi.
+                        let safeBase64 = base64Data;
+                        if (safeBase64.includes('image/x-wmf') || safeBase64.includes('image/x-emf') || safeBase64.startsWith('data:;base64,')) {
+                            safeBase64 = safeBase64.replace(/^data:.*?;base64,/, 'data:image/png;base64,');
+                        }
+
                         const formData = new FormData();
-                        formData.append('file', base64Data);
+                        formData.append('file', safeBase64);
                         formData.append('upload_preset', 'oqpr62fq'); 
 
                         for (let i = 0; i < retries; i++) {
@@ -1081,7 +1093,12 @@ window.saveQuiz = function() {
                                 });
                                 if (!res.ok) throw new Error('API Error');
                                 const data = await res.json();
-                                if (data.secure_url) return ` [img:${data.secure_url}] `; // Thêm dấu cách 2 bên để an toàn
+                                // Ép Cloudinary trả về đuôi .png (để trình duyệt chắc chắn đọc được)
+                                if (data.secure_url) {
+                                    let finalUrl = data.secure_url;
+                                    finalUrl = finalUrl.replace(/\.wmf$/i, '.png').replace(/\.emf$/i, '.png');
+                                    return ` [img:${finalUrl}] `; 
+                                }
                             } catch (err) {
                                 if (i === retries - 1) return ' [Lỗi tải ảnh] ';
                             }

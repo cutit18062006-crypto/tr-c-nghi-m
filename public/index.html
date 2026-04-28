@@ -320,6 +320,7 @@
         let currentTextDuplicateGroups = [];
         let currentImageDuplicateGroups = [];
         let currentScanMode = 'full';
+        window.pinnedQuestionsSet = new Set();
 
         // ------------------------------------------------------------------
         // CÁC HÀM TIỆN ÍCH & RENDER
@@ -455,7 +456,9 @@
                if (qStartRegex.test(trimmed)) {
     if (currentQ) { 
         currentQ.options.forEach(o => o.text = o.text.trim()); 
-        currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText); // <-- THÊM DÒNG NÀY
+        const textToHash = currentQ.cleanText || currentQ.questionText;
+        const key = window.normalizeForCompare(textToHash) || textToHash.trim();
+        currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText) || (window.pinnedQuestionsSet && window.pinnedQuestionsSet.has(key));
         questions.push(currentQ); 
     }
     const match = trimmed.match(qStartRegex);
@@ -523,7 +526,9 @@
 
             if (currentQ) { 
     currentQ.options.forEach(o => o.text = o.text.trim()); 
-    currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText); // <-- THÊM DÒNG NÀY
+    const textToHash = currentQ.cleanText || currentQ.questionText;
+    const key = window.normalizeForCompare(textToHash) || textToHash.trim();
+    currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText) || (window.pinnedQuestionsSet && window.pinnedQuestionsSet.has(key));
     questions.push(currentQ); 
 }
 return questions;
@@ -935,6 +940,9 @@ return questions;
             try {
                 localStorage.setItem('quiz_draft_title', quizTitleInput.value);
                 localStorage.setItem('quiz_draft_content', editor.value);
+                if (window.pinnedQuestionsSet) {
+                    localStorage.setItem('quiz_draft_pinned', JSON.stringify(Array.from(window.pinnedQuestionsSet)));
+                }
                 
                 // Chỉ lưu những ảnh thực sự có trong văn bản để tránh "ảnh ma"
                 const usedImages = {};
@@ -959,6 +967,15 @@ return questions;
             const dt = localStorage.getItem('quiz_draft_title');
             const dc = localStorage.getItem('quiz_draft_content');
             const di = localStorage.getItem('quiz_draft_images');
+            const dp = localStorage.getItem('quiz_draft_pinned');
+            
+            window.pinnedQuestionsSet = new Set();
+            if (dp !== null) {
+                try {
+                    const parsedPinned = JSON.parse(dp);
+                    if (Array.isArray(parsedPinned)) window.pinnedQuestionsSet = new Set(parsedPinned);
+                } catch(e) {}
+            }
             
             if (dt !== null) quizTitleInput.value = dt;
             if (di !== null) {
@@ -1165,6 +1182,13 @@ window.saveQuiz = function() {
             const res = await handleImportJson(file);
             if(res.success && res.data.questions) {
                 quizTitleInput.value = res.data.title || "";
+                if (!window.pinnedQuestionsSet) window.pinnedQuestionsSet = new Set();
+                res.data.questions.forEach(q => {
+                    if (q.isFixed) {
+                        const textToHash = q.cleanText || q.questionText;
+                        window.pinnedQuestionsSet.add(window.normalizeForCompare(textToHash) || textToHash.trim());
+                    }
+                });
                 window.rebuildEditorText(res.data.questions);
                 if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
             } else alert("File lỗi!");
@@ -1174,9 +1198,20 @@ window.saveQuiz = function() {
         document.getElementById('merge-upload').addEventListener('change', async function(e) {
             const files = e.target.files; if (files.length === 0) return;
             let combined = [], title = "Đề tổng hợp: ", count = 0;
+            if (!window.pinnedQuestionsSet) window.pinnedQuestionsSet = new Set();
             for(let file of files) {
                 const res = await handleImportJson(file);
-                if(res.success && res.data.questions) { combined = combined.concat(res.data.questions); title += res.data.title + "; "; count++; }
+                if(res.success && res.data.questions) { 
+                    combined = combined.concat(res.data.questions); 
+                    title += res.data.title + "; "; 
+                    count++; 
+                    res.data.questions.forEach(q => {
+                        if (q.isFixed) {
+                            const textToHash = q.cleanText || q.questionText;
+                            window.pinnedQuestionsSet.add(window.normalizeForCompare(textToHash) || textToHash.trim());
+                        }
+                    });
+                }
             }
             if(count > 0) {
                 quizTitleInput.value = title.slice(0, -2);
@@ -1250,15 +1285,30 @@ window.saveQuiz = function() {
             const qs = parseEditorContent();
             if(qs[qIdx]) {
                 const isFixed = qs[qIdx].isFixed;
-                if(isFixed) {
+                let textModified = false;
+                if (/\[pin\]|\[cố định\]/i.test(qs[qIdx].questionText)) {
                     qs[qIdx].questionText = qs[qIdx].questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim();
                     qs[qIdx].cleanText = qs[qIdx].cleanText.replace(/\[pin\]|\[cố định\]/gi, '').trim();
-                } else {
-                    qs[qIdx].questionText += ' [pin]';
-                    qs[qIdx].cleanText += ' [pin]';
+                    textModified = true;
                 }
-                window.rebuildEditorText(qs);
-                if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
+                
+                const textToHash = qs[qIdx].cleanText || qs[qIdx].questionText;
+                const key = window.normalizeForCompare(textToHash) || textToHash.trim();
+                if (!window.pinnedQuestionsSet) window.pinnedQuestionsSet = new Set();
+                
+                if (isFixed) {
+                    window.pinnedQuestionsSet.delete(key);
+                } else {
+                    window.pinnedQuestionsSet.add(key);
+                }
+                
+                if (textModified) {
+                    window.rebuildEditorText(qs);
+                    if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
+                } else {
+                    renderPreview();
+                    window.saveDraft();
+                }
             }
         };
 

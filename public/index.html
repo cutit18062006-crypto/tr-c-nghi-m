@@ -452,9 +452,13 @@
                 if(!trimmed) return; 
 
                 // Kiểm tra xem dòng này có phải là Câu hỏi mới không
-                if (qStartRegex.test(trimmed)) {
-                    if (currentQ) { currentQ.options.forEach(o => o.text = o.text.trim()); questions.push(currentQ); }
-                    const match = trimmed.match(qStartRegex);
+               if (qStartRegex.test(trimmed)) {
+    if (currentQ) { 
+        currentQ.options.forEach(o => o.text = o.text.trim()); 
+        currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText); // <-- THÊM DÒNG NÀY
+        questions.push(currentQ); 
+    }
+    const match = trimmed.match(qStartRegex);
                     currentQ = {
                         originalPrefix: match ? match[1].trim() : "Câu :",      
                         visualNumber: match ? parseInt(match[2] || match[3] || -1, 10) : -1,     
@@ -517,8 +521,12 @@
                 }
             });
 
-            if (currentQ) { currentQ.options.forEach(o => o.text = o.text.trim()); questions.push(currentQ); }
-            return questions;
+            if (currentQ) { 
+    currentQ.options.forEach(o => o.text = o.text.trim()); 
+    currentQ.isFixed = /\[pin\]|\[cố định\]/i.test(currentQ.questionText); // <-- THÊM DÒNG NÀY
+    questions.push(currentQ); 
+}
+return questions;
         }
 
         function appendToCurrent(q, text) {
@@ -1220,14 +1228,39 @@ window.saveQuiz = function() {
             const qs = parseEditorContent(); preview.innerHTML = '';
             if (qs.length === 0) { preview.innerHTML = '<p class="text-gray-400 italic text-center mt-10">Chưa có nội dung...</p>'; return; }
             qs.forEach((q, qIdx) => {
-                const div = document.createElement('div'); div.className = 'bg-white p-5 rounded-xl border mb-6'; div.id = `preview-q-${qIdx}`; 
-                div.innerHTML = `<div class="font-semibold mb-4 whitespace-pre-wrap text-lg">${window.formatContent(q.questionText)}</div>`;
+                const div = document.createElement('div'); div.className = 'bg-white p-5 rounded-xl border mb-6 relative group'; div.id = `preview-q-${qIdx}`; 
+                
+                const isFixed = q.isFixed;
+                const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
+                const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-4 right-4 p-1.5 rounded-md border transition-all ${pinBtnColor}" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}">
+                    <svg class="w-5 h-5" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </button>`;
+                
+                const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
+
+                div.innerHTML = `${pinBtnHtml}<div class="font-semibold mb-4 whitespace-pre-wrap text-lg pr-10">${displayTitle}</div>`;
                 const optDiv = document.createElement('div'); optDiv.className = 'space-y-3 mt-4';
                 q.options.forEach((opt, oIdx) => { const btn = createOptionButton(opt, qIdx, oIdx, false); btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); optDiv.appendChild(btn); });
                 div.appendChild(optDiv); preview.appendChild(div);
             });
             renderMath(preview);
         }
+
+        window.togglePinQuestion = function(qIdx) {
+            const qs = parseEditorContent();
+            if(qs[qIdx]) {
+                const isFixed = qs[qIdx].isFixed;
+                if(isFixed) {
+                    qs[qIdx].questionText = qs[qIdx].questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim();
+                    qs[qIdx].cleanText = qs[qIdx].cleanText.replace(/\[pin\]|\[cố định\]/gi, '').trim();
+                } else {
+                    qs[qIdx].questionText += ' [pin]';
+                    qs[qIdx].cleanText += ' [pin]';
+                }
+                window.rebuildEditorText(qs);
+                if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); }
+            }
+        };
 
         window.handlePreviewClick = function(qIdx, oIdx, startIndex) {
             const qs = parseEditorContent();
@@ -1365,12 +1398,13 @@ window.resumeSavedQuiz = function() {
         function startQuiz(data) {
     let qs = JSON.parse(JSON.stringify(data.questions));
     if (isShuffleEnabled) {
-        qs.forEach(q => {
-            if (q.options) q.options = window.shuffleArray(q.options);
-            q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx));
-        });
-        qs = window.shuffleArray(qs);
-    }
+    qs.forEach(q => {
+        // THÊM ĐIỀU KIỆN && !q.isFixed VÀO ĐÂY:
+        if (q.options && !q.isFixed) q.options = window.shuffleArray(q.options);
+        q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx));
+    });
+    qs = window.shuffleArray(qs);
+}
     
     currentQuizData = qs; 
     userAnswers = {};
@@ -1426,7 +1460,7 @@ window.resumeSavedQuiz = function() {
             const container = document.getElementById('quiz-container'); container.innerHTML = '';
             qs.forEach((q, idx) => {
                 const div = document.createElement('div'); div.className = 'bg-white p-8 rounded-2xl border border-gray-100 shadow-lg question-block'; div.dataset.idx = idx;
-                const cleanT = q.cleanText !== undefined ? q.cleanText : (q.questionText || "").replace(/^(Câu|Bài|Question)\s+\d+[:.]?\s*/i, '');
+                const cleanT = (q.cleanText !== undefined ? q.cleanText : (q.questionText || "").replace(/^(Câu|Bài|Question)\s+\d+[:.]?\s*/i, '')).replace(/\[pin\]|\[cố định\]/gi, '');
                 div.innerHTML = `<div class="flex gap-4 mb-6"><div class="shrink-0 w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-md">${idx + 1}</div><div class="flex-1 pt-1 text-xl font-semibold text-gray-800 whitespace-pre-wrap leading-relaxed">${window.formatContent(cleanT)}</div></div>`;
                 const optDiv = document.createElement('div'); optDiv.className = "grid gap-4 options-grid mt-6";
                 if(q.options) {
@@ -1519,11 +1553,12 @@ window.resumeSavedQuiz = function() {
         window.retryWrong = function() {
             let qs = JSON.parse(JSON.stringify(currentQuizData.filter((q, i) => userAnswers[i] === 'wrong' || userAnswers[i]?.status === 'wrong')));
             qs.forEach(q => { 
-                if(q.options) {
-                    if (isShuffleEnabled) q.options = window.shuffleArray(q.options); 
-                    q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx)); 
-                }
-            });
+    if(q.options) {
+        // THÊM ĐIỀU KIỆN !q.isFixed VÀO ĐÂY:
+        if (isShuffleEnabled && !q.isFixed) q.options = window.shuffleArray(q.options); 
+        q.options.forEach((opt, idx) => opt.label = String.fromCharCode(65 + idx)); 
+    }
+});
             if (isShuffleEnabled) qs = window.shuffleArray(qs);
             currentQuizData = qs; userAnswers = {}; 
             

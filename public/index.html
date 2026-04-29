@@ -1334,7 +1334,7 @@ window.saveQuiz = function() {
             let textColor = opt.correct ? 'text-blue-700 font-medium' : 'text-gray-700';
             let hoverBorder = opt.correct ? '' : 'group-hover:border-blue-400 group-hover:text-blue-600';
 
-            btn.innerHTML = `<div class="font-bold text-[14px] shrink-0 w-[36px] rounded border flex items-center justify-center bg-white transition-colors ${borderColor} ${textColor} ${hoverBorder}">${opt.label}</div><div class="flex-1 text-[14px] bg-white border rounded px-3 py-1.5 flex items-center transition-colors ${isMergeLines ? '' : 'preserve-lines'} ${borderColor} ${textColor} ${hoverBorder}">${window.formatContent(opt.text)}</div>`;
+            btn.innerHTML = `<div class="font-bold text-[14px] shrink-0 w-[36px] rounded border flex items-center justify-center bg-white transition-colors ${borderColor} ${textColor} ${hoverBorder}">${opt.label}</div><div class="flex-1 text-[14px] bg-white border rounded px-3 py-1.5 transition-colors ${isMergeLines ? '' : 'preserve-lines'} ${borderColor} ${textColor} ${hoverBorder}">${window.formatContent(opt.text)}</div>`;
             return btn;
         }
 

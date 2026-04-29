@@ -131,6 +131,10 @@
                 <span class="text-sm text-gray-600">Chế độ mượt (Fix lag)</span>
                 <input type="checkbox" id="debounce-toggle" checked class="w-5 h-5 cursor-pointer"/>
             </div>
+            <div class="px-4 flex items-center justify-between mb-4 group cursor-pointer" onclick="document.getElementById('autocomplete-toggle').click()">
+                <span class="text-sm text-gray-600">Tự động gõ (Auto-complete)</span>
+                <input type="checkbox" id="autocomplete-toggle" checked class="w-5 h-5 cursor-pointer"/>
+            </div>
             <div class="px-4 flex items-center justify-between mb-2 group cursor-pointer" onclick="document.getElementById('shuffle-toggle').click()">
                 <span class="text-sm text-gray-600">Xáo trộn câu & đáp án</span>
                 <input type="checkbox" id="shuffle-toggle" checked class="w-5 h-5 cursor-pointer"/>
@@ -157,10 +161,13 @@
             <div class="w-1/2 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 h-full">
                 <!-- TOOLBAR -->
                 <div class="bg-gray-50 border-b border-gray-200 rounded-t-xl z-20">
-                    <button onclick="window.toggleFileTools()" class="w-full flex justify-between items-center p-3 px-4 text-gray-700 hover:bg-gray-100 focus:outline-none rounded-t-xl">
-                        <span class="font-bold text-sm">Công cụ soạn thảo</span>
-                        <svg id="tools-toggle-icon" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </button>
+                    <div class="w-full flex justify-between items-center pr-4 bg-gray-50 rounded-t-xl hover:bg-gray-100 transition-colors">
+                        <button onclick="window.toggleFileTools()" class="flex-1 flex justify-start items-center p-3 px-4 text-gray-700 focus:outline-none rounded-tl-xl gap-2">
+                            <span class="font-bold text-sm">Công cụ soạn thảo</span>
+                            <svg id="tools-toggle-icon" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <span id="draft-status" class="text-xs text-green-600 font-medium hidden">Đã lưu nháp</span>
+                    </div>
                     <div id="tools-content" class="px-4 pb-0 pt-0 transition-all duration-300 overflow-hidden flex flex-wrap gap-2 items-center bg-gray-50" style="max-height: 0px;">
                         
                         <label class="relative p-2 rounded bg-indigo-100 text-indigo-600 hover:bg-indigo-200 cursor-pointer text-xs font-bold">
@@ -185,16 +192,11 @@
                     </div>
                 </div>
 
-                <div class="p-4 border-b">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs text-gray-500 font-bold uppercase">Tiêu đề đề thi</span>
-                        <span id="draft-status" class="text-xs text-green-600 font-medium hidden">Đã lưu nháp</span>
-                    </div>
-                    <input type="text" id="quiz-title" class="w-full p-2 text-lg font-bold text-gray-800 border-b-2 focus:border-blue-500 outline-none" placeholder="Nhập tiêu đề...">
-                </div>
+                <input type="hidden" id="quiz-title" value="Bai_Tap_Trac_Nghiem">
                 
-                <div class="flex-1 p-4 flex flex-col relative z-0">
-                    <textarea id="editor" tabindex="-1" class="flex-1 w-full p-4 bg-gray-50 border rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm resize-none" placeholder="Câu 1: Nội dung...&#10;A. Đáp án A&#10;B. Đáp án B..."></textarea>
+                <div class="flex-1 m-4 relative z-0 border rounded-lg focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500 bg-gray-50">
+                    <div id="editor-highlight" class="absolute inset-0 p-4 font-mono text-sm whitespace-pre-wrap break-words pointer-events-none text-gray-800" style="overflow-y: auto; overflow-x: hidden;"></div>
+                    <textarea id="editor" spellcheck="false" tabindex="-1" class="absolute inset-0 w-full h-full p-4 font-mono text-sm resize-none outline-none border-none m-0 bg-transparent" style="color: transparent; caret-color: black; overflow-y: auto; overflow-x: hidden;" placeholder="Câu 1: Nội dung...&#10;A. Đáp án A&#10;B. Đáp án B..."></textarea>
                 </div>
                 <div class="p-4 border-t flex justify-end z-10">
                     <button onclick="window.saveQuiz()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold">Lưu Đề Thi (.json)</button>
@@ -275,6 +277,8 @@
         const mergeToggle = document.getElementById('merge-toggle');
         const debounceToggle = document.getElementById('debounce-toggle');
         const shuffleToggle = document.getElementById('shuffle-toggle');
+        const autocompleteToggle = document.getElementById('autocomplete-toggle');
+        const editorHighlight = document.getElementById('editor-highlight');
         const questionNavPanel = document.getElementById('question-nav-panel');
         const questionGrid = document.getElementById('question-grid');
         const miniProgress = document.getElementById('mini-progress');
@@ -312,6 +316,7 @@
         let isMergeLines = mergeToggle.checked;
         let isDebounceEnabled = debounceToggle.checked;
         let isShuffleEnabled = shuffleToggle.checked;
+        let isAutoCompleteEnabled = autocompleteToggle ? autocompleteToggle.checked : true;
         let isFooterVisible = true;
         let isSidebarOpen = true;
         let isToolsOpen = false;
@@ -550,6 +555,7 @@ return questions;
                 reconstructedText += "\n";
             });
             editor.value = reconstructedText.trim();
+            if (window.updateHighlight) window.updateHighlight();
         };
 
         // ------------------------------------------------------------------
@@ -986,6 +992,7 @@ return questions;
             }
             if (dc !== null) {
                 editor.value = dc;
+                if (window.updateHighlight) window.updateHighlight();
                 // Quan trọng: Phải render lại giao diện sau khi tải dữ liệu
                 renderPreview(); 
             }
@@ -1247,10 +1254,69 @@ window.saveQuiz = function() {
             }, 50); 
         }
 
-        editor.addEventListener('input', () => isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft(), safeHighlight()));
-        editor.addEventListener('keyup', (e) => { if(e.key !== 'Tab') safeHighlight(); });
+        window.updateHighlight = function() {
+            if (!editor || !editorHighlight) return;
+            let text = editor.value;
+            text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            text = text.replace(/^(Câu|Bài|Question)\s*\d+[:.]?\s*/gim, '<span class="text-blue-600 font-bold">$&</span>');
+            text = text.replace(/^(\*?[A-D])\.\s+/gim, '<span class="text-red-600 font-bold">$&</span>');
+            if (text.length > 0 && text[text.length - 1] === '\n') text += ' ';
+            editorHighlight.innerHTML = text;
+        };
+
+        editor.addEventListener('scroll', function() { editorHighlight.scrollTop = this.scrollTop; });
+        editor.addEventListener('input', () => { window.updateHighlight(); isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft(), safeHighlight()); });
+        editor.addEventListener('keyup', (e) => { if(e.key !== 'Tab' && e.key !== 'Enter') safeHighlight(); });
         editor.addEventListener('click', safeHighlight);
-        editor.addEventListener('keydown', function(e) { if (e.key === 'Tab') { e.preventDefault(); this.setRangeText("\t", this.selectionStart, this.selectionEnd, 'end'); isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft()); safeHighlight(); } });
+        editor.addEventListener('keydown', function(e) { 
+            if (e.key === 'Tab') { 
+                e.preventDefault(); 
+                this.setRangeText("\t", this.selectionStart, this.selectionEnd, 'end'); 
+                window.updateHighlight();
+                isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft()); 
+                safeHighlight(); 
+            } else if (e.key === 'Enter' && isAutoCompleteEnabled) {
+                const start = this.selectionStart;
+                const text = this.value;
+                const cursorAtLineEnd = start === text.length || text[start] === '\n';
+                
+                if (cursorAtLineEnd) {
+                    const textBeforeCursor = text.substring(0, start);
+                    const lines = textBeforeCursor.split('\n');
+                    const currentLine = lines[lines.length - 1];
+                    let insertText = '\n';
+
+                    const qMatch = currentLine.match(/^(Câu|Bài|Question)\s*(\d+)[:.]?\s*(.*)$/i);
+                    const optMatch = currentLine.match(/^(\*?)([A-D])\.\s*(.*)$/i);
+
+                    if (qMatch && currentLine.trim() !== qMatch[1] + " " + qMatch[2] + ":") {
+                        insertText = '\nA. ';
+                    } else if (optMatch && optMatch[3].trim() !== '') {
+                        const charCode = optMatch[2].toUpperCase().charCodeAt(0);
+                        if (charCode === 68) { // "D"
+                            const allQuestions = textBeforeCursor.match(/^(Câu|Bài|Question)\s*\d+[:.]?/gim) || [];
+                            const nextNum = allQuestions.length + 1;
+                            insertText = `\n\nCâu ${nextNum}: `;
+                        } else {
+                            const nextChar = String.fromCharCode(charCode + 1);
+                            insertText = `\n${nextChar}. `;
+                        }
+                    }
+
+                    if (insertText !== '\n') {
+                        e.preventDefault();
+                        this.setRangeText(insertText, start, start, 'end');
+                        this.selectionStart = this.selectionEnd = start + insertText.length;
+                        window.updateHighlight();
+                        isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft());
+                        safeHighlight();
+                        this.blur();
+                        this.focus();
+                        setTimeout(() => { editorHighlight.scrollTop = this.scrollTop; }, 0);
+                    }
+                }
+            }
+        });
 
         function createOptionButton(opt, qIdx, oIdx, isTaking) {
             const btn = document.createElement('button'); if (!isTaking) btn.setAttribute('tabindex', '-1');
@@ -1259,23 +1325,38 @@ window.saveQuiz = function() {
             return btn;
         }
 
+        function createPreviewOptionButton(opt, qIdx, oIdx) {
+            const btn = document.createElement('button');
+            btn.setAttribute('tabindex', '-1');
+            btn.className = `w-full text-left transition-all flex items-stretch gap-2 mb-2 group`; 
+            
+            let borderColor = opt.correct ? 'border-blue-500' : 'border-gray-300';
+            let textColor = opt.correct ? 'text-blue-700 font-medium' : 'text-gray-700';
+            let hoverBorder = opt.correct ? '' : 'group-hover:border-blue-400 group-hover:text-blue-600';
+
+            btn.innerHTML = `<div class="font-bold text-[14px] shrink-0 w-[36px] rounded border flex items-center justify-center bg-white transition-colors ${borderColor} ${textColor} ${hoverBorder}">${opt.label}</div><div class="flex-1 text-[14px] bg-white border rounded px-3 py-1.5 flex items-center transition-colors ${isMergeLines ? '' : 'preserve-lines'} ${borderColor} ${textColor} ${hoverBorder}">${window.formatContent(opt.text)}</div>`;
+            return btn;
+        }
+
         function renderPreview() {
             const qs = parseEditorContent(); preview.innerHTML = '';
             if (qs.length === 0) { preview.innerHTML = '<p class="text-gray-400 italic text-center mt-10">Chưa có nội dung...</p>'; return; }
             qs.forEach((q, qIdx) => {
-                const div = document.createElement('div'); div.className = 'bg-white p-5 rounded-xl border mb-6 relative group'; div.id = `preview-q-${qIdx}`; 
+                const div = document.createElement('div'); div.className = 'mb-6 relative'; div.id = `preview-q-${qIdx}`; 
                 
                 const isFixed = q.isFixed;
                 const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
-                const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-4 right-4 p-1.5 rounded-md border transition-all ${pinBtnColor}" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}">
-                    <svg class="w-5 h-5" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                </button>`;
+                const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-2 right-2 p-1.5 rounded-md border transition-all ${pinBtnColor} scale-90 flex items-center justify-center" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}"><svg class="w-4 h-4" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></button>`;
                 
                 const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
 
-                div.innerHTML = `${pinBtnHtml}<div class="font-semibold mb-4 whitespace-pre-wrap text-lg pr-10">${displayTitle}</div>`;
-                const optDiv = document.createElement('div'); optDiv.className = 'space-y-3 mt-4';
-                q.options.forEach((opt, oIdx) => { const btn = createOptionButton(opt, qIdx, oIdx, false); btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); optDiv.appendChild(btn); });
+                div.innerHTML = `<div class="relative font-medium mb-3 whitespace-pre-wrap text-[15px] border border-gray-300 rounded bg-white p-3 text-gray-800 pr-10 shadow-sm">${displayTitle}${pinBtnHtml}</div>`;
+                const optDiv = document.createElement('div'); optDiv.className = 'space-y-1.5';
+                q.options.forEach((opt, oIdx) => { 
+                    const btn = createPreviewOptionButton(opt, qIdx, oIdx); 
+                    btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); 
+                    optDiv.appendChild(btn); 
+                });
                 div.appendChild(optDiv); preview.appendChild(div);
             });
             renderMath(preview);
@@ -1649,6 +1730,7 @@ window.resumeSavedQuiz = function() {
         mergeToggle.addEventListener('change', (e) => { isMergeLines = e.target.checked; renderPreview(); if(currentQuizData.length>0 && !document.getElementById('quiz-area').classList.contains('hidden')){ renderQuizForTaking(currentQuizData); Object.keys(userAnswers).forEach(i => document.getElementById(`q-nav-${i}`)?.classList.add('answered')); } });
         debounceToggle.addEventListener('change', (e) => isDebounceEnabled = e.target.checked);
         shuffleToggle.addEventListener('change', (e) => isShuffleEnabled = e.target.checked);
+        if(autocompleteToggle) autocompleteToggle.addEventListener('change', (e) => isAutoCompleteEnabled = e.target.checked);
 
         // INIT LOAD VÀ LOGIC AUTO-RESUME SIÊU TỐC
         document.addEventListener('DOMContentLoaded', () => {

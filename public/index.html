@@ -41,6 +41,8 @@
         .active-preview-q { border-left: 4px solid #3b82f6 !important; background-color: #eff6ff !important; transform: scale(1.01); transition: all 0.2s ease; }
         @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .modal-content { animation: popIn 0.2s ease-out; }
+        #editor::selection { color: transparent; background-color: rgba(100, 149, 237, 0.4); }
+        #editor::-moz-selection { color: transparent; background-color: rgba(100, 149, 237, 0.4); }
     </style>
 </head>
 <body class="bg-gray-100 h-screen flex overflow-hidden">
@@ -1264,7 +1266,33 @@ window.saveQuiz = function() {
             editorHighlight.innerHTML = text;
         };
 
-        editor.addEventListener('scroll', function() { editorHighlight.scrollTop = this.scrollTop; });
+        let scrollSyncTimeout;
+        let isSyncingScroll = false;
+        editor.addEventListener('scroll', function() { 
+            if (isSyncingScroll) return;
+            isSyncingScroll = true;
+            editorHighlight.scrollTop = this.scrollTop;
+            isSyncingScroll = false;
+            // Always sync preview to match editor scroll position (handles Ctrl+F navigation arrows)
+            clearTimeout(scrollSyncTimeout);
+            scrollSyncTimeout = setTimeout(() => {
+                const scrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+                const qs = parseEditorContent();
+                if (qs.length > 0) {
+                    const targetIdx = Math.min(Math.floor(scrollRatio * qs.length), qs.length - 1);
+                    document.querySelectorAll('.active-preview-q').forEach(el => el.classList.remove('active-preview-q'));
+                    const target = document.getElementById(`preview-q-${targetIdx}`);
+                    if (target) { target.classList.add('active-preview-q'); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                }
+            }, 100);
+        });
+        // When Ctrl+F scrolls the highlight div (because visible text is there), sync textarea to match
+        editorHighlight.addEventListener('scroll', function() {
+            if (isSyncingScroll) return;
+            isSyncingScroll = true;
+            editor.scrollTop = this.scrollTop;
+            isSyncingScroll = false;
+        });
         editor.addEventListener('input', () => { window.updateHighlight(); isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft(), safeHighlight()); });
         editor.addEventListener('keyup', (e) => { if(e.key !== 'Tab' && e.key !== 'Enter') safeHighlight(); });
         editor.addEventListener('click', safeHighlight);

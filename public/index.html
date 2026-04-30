@@ -1413,7 +1413,26 @@ window.saveQuiz = function() {
             isSyncingScroll = true; // Disable scroll sync during preview click
             const qs = parseEditorContent();
             if(qs[qIdx] && qs[qIdx].options) { qs[qIdx].options.forEach((opt, i) => opt.correct = (i === oIdx)); window.rebuildEditorText(qs); if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); } }
-            if (startIndex !== undefined) { editor.focus(); editor.setSelectionRange(startIndex, startIndex); editor.blur(); editor.focus(); }
+            if (startIndex !== undefined) {
+                editor.focus();
+                editor.setSelectionRange(startIndex, startIndex);
+                // Use mirror div to measure actual rendered height up to cursor
+                const mirror = document.createElement('div');
+                const editorStyle = getComputedStyle(editor);
+                mirror.style.cssText = `position:absolute;visibility:hidden;height:auto;overflow:hidden;white-space:pre-wrap;word-wrap:break-word;`;
+                mirror.style.width = editor.clientWidth + 'px';
+                mirror.style.font = editorStyle.font;
+                mirror.style.fontSize = editorStyle.fontSize;
+                mirror.style.lineHeight = editorStyle.lineHeight;
+                mirror.style.padding = editorStyle.padding;
+                mirror.style.letterSpacing = editorStyle.letterSpacing;
+                mirror.textContent = editor.value.substring(0, startIndex);
+                document.body.appendChild(mirror);
+                const targetScroll = Math.max(0, mirror.scrollHeight - 10);
+                document.body.removeChild(mirror);
+                editor.scrollTop = targetScroll;
+                editorHighlight.scrollTop = editor.scrollTop;
+            }
             preview.scrollTop = previewScrollTop;
             setTimeout(() => { isSyncingScroll = false; }, 200);
         };

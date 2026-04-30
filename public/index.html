@@ -1422,9 +1422,13 @@ window.saveQuiz = function() {
         };
 
         window.handlePreviewClick = function(qIdx, oIdx, startIndex) {
+            const previewScrollTop = preview.scrollTop;
+            isSyncingScroll = true; // Disable scroll sync during preview click
             const qs = parseEditorContent();
             if(qs[qIdx] && qs[qIdx].options) { qs[qIdx].options.forEach((opt, i) => opt.correct = (i === oIdx)); window.rebuildEditorText(qs); if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); } }
             if (startIndex !== undefined) { editor.focus(); editor.setSelectionRange(startIndex, startIndex); editor.blur(); editor.focus(); }
+            preview.scrollTop = previewScrollTop;
+            setTimeout(() => { isSyncingScroll = false; }, 200);
         };
 
         // =================================================================

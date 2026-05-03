@@ -129,6 +129,10 @@
                 <span class="text-sm text-gray-600">Gộp dòng đáp án</span>
                 <input type="checkbox" id="merge-toggle" class="w-5 h-5 cursor-pointer"/>
             </div>
+            <div class="px-4 flex items-center justify-between mb-4 group cursor-pointer" onclick="document.getElementById('merge-question-toggle').click()">
+                <span class="text-sm text-gray-600">Gộp dòng câu hỏi</span>
+                <input type="checkbox" id="merge-question-toggle" class="w-5 h-5 cursor-pointer"/>
+            </div>
             <div class="px-4 flex items-center justify-between mb-4 group cursor-pointer" onclick="document.getElementById('debounce-toggle').click()">
                 <span class="text-sm text-gray-600">Chế độ mượt (Fix lag)</span>
                 <input type="checkbox" id="debounce-toggle" checked class="w-5 h-5 cursor-pointer"/>
@@ -316,6 +320,8 @@
         let localImages = {}; // Kho chứa ảnh Offline Base64
         
         let isMergeLines = mergeToggle.checked;
+        const mergeQuestionToggle = document.getElementById('merge-question-toggle');
+        let isMergeQuestionLines = mergeQuestionToggle.checked;
         let isDebounceEnabled = debounceToggle.checked;
         let isShuffleEnabled = shuffleToggle.checked;
         let isAutoCompleteEnabled = autocompleteToggle ? autocompleteToggle.checked : true;
@@ -448,10 +454,7 @@
             let currentQ = null;
             let charCount = 0; 
 
-            const qStartRegex = /^((?:Câu|Question|Bài)\s+(\d+)[:.]?\s*|(\d+)[\.:]\s*)/i;
-            // Regex tìm ký tự bắt đầu đáp án (VD: A., *B., C., *D.)
-            // Có dấu phân cách (chấm) và theo sau là dấu cách hoặc chữ.
-            const optionStartRegex = /(\*)?([A-D])\.\s+/g; 
+            const qStartRegex = /^((?:Câu|Question|Bài)\s+(\d+)[:.]?\s*|(\d+)[\.:]?\s*)/i;
 
             lines.forEach(line => {
                 const lineStartIndex = charCount;
@@ -481,51 +484,17 @@
 
                 if (!currentQ) currentQ = { originalPrefix: "Câu :", visualNumber: -1, cleanText: "", questionText: "", options: [], state: 'question', nextExpectedLabel: 'A', startIndex: lineStartIndex };
 
-                // LOGIC MỚI: TÌM VÀ CẮT CÁC ĐÁP ÁN NẰM CHUNG 1 DÒNG
-                let matches = [];
-                let m;
-                // Tìm tất cả các cụm "A.", "B.", v.v... trong dòng
-                while ((m = optionStartRegex.exec(trimmed)) !== null) {
-                    const label = m[2].toUpperCase();
-                    // Chỉ cắt nếu label khớp với thứ tự đang chờ (VD: đang chờ C mà thấy C. thì mới cắt)
-                    if (label === currentQ.nextExpectedLabel) {
-                        matches.push({
-                            index: m.index,
-                            matchLength: m[0].length,
-                            isCorrect: !!m[1],
-                            label: label
-                        });
-                        currentQ.nextExpectedLabel = String.fromCharCode(currentQ.nextExpectedLabel.charCodeAt(0) + 1);
-                    }
-                }
-
-                // Nếu trong dòng này có chứa đáp án (1 hoặc nhiều)
-                if (matches.length > 0) {
+                // Kiểm tra dòng bắt đầu bằng đáp án (VD: A., *B., C., *D.)
+                const optMatch = trimmed.match(/^(\*?)([A-D])\.\s+/);
+                if (optMatch && optMatch[2].toUpperCase() === currentQ.nextExpectedLabel) {
                     currentQ.state = 'option';
-                    
-                    // Nếu trước khi gặp đáp án đầu tiên trên dòng này còn có chữ, thì chữ đó thuộc về câu hỏi
-                    if (matches[0].index > 0) {
-                        const leftoverQuestionText = trimmed.substring(0, matches[0].index).trim();
-                        if (leftoverQuestionText) {
-                            appendToCurrent(currentQ, leftoverQuestionText);
-                        }
-                    }
-
-                    // Tách từng phần đáp án ra
-                    for (let i = 0; i < matches.length; i++) {
-                        const startExtract = matches[i].index + matches[i].matchLength;
-                        const endExtract = (i + 1 < matches.length) ? matches[i + 1].index : trimmed.length;
-                        
-                        const optionText = trimmed.substring(startExtract, endExtract).trim();
-                        
-                        currentQ.options.push({
-                            label: matches[i].label,
-                            text: optionText,
-                            correct: matches[i].isCorrect
-                        });
-                    }
-                } 
-                // Nếu dòng này không chứa cụm "A.", "B." nào, thì nó nối tiếp vào câu hỏi hoặc đáp án trước đó
+                    const label = optMatch[2].toUpperCase();
+                    const isCorrect = !!optMatch[1];
+                    const optionText = trimmed.substring(optMatch[0].length).trim();
+                    currentQ.options.push({ label: label, text: optionText, correct: isCorrect });
+                    currentQ.nextExpectedLabel = String.fromCharCode(label.charCodeAt(0) + 1);
+                }
+                // Nếu dòng này không phải đáp án, nối tiếp vào câu hỏi hoặc đáp án trước đó
                 else { 
                     appendToCurrent(currentQ, trimmed); 
                 }
@@ -1288,7 +1257,54 @@ window.saveQuiz = function() {
             editor.scrollTop = this.scrollTop;
             isSyncingScroll = false;
         });
-        editor.addEventListener('input', () => { window.updateHighlight(); isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft(), safeHighlight()); });
+        // Auto-format function for real-time merge lines
+        function autoFormatEditor() {
+            if (!isMergeLines && !isMergeQuestionLines) return;
+            const cursorPos = editor.selectionStart;
+            const textBefore = editor.value;
+            let text = textBefore;
+            
+            if (isMergeLines) {
+                // Convert horizontal answers to vertical (e.g. "A. x  B. y" → "A. x\nB. y")
+                text = text.replace(/([^\n])\s{2,}(\*?[A-D])\.\s+/g, '$1\n$2. ');
+                text = text.replace(/([^\n])\s+(\*?[A-D])\.\s+/g, (match, before, label) => {
+                    if (/[.;,a-zA-Z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ)]$/.test(before.trim())) {
+                        return before + '\n' + label + '. ';
+                    }
+                    return match;
+                });
+                // Merge continuation lines into previous answer line
+                text = text.replace(/([A-D]\..+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
+            }
+            
+            if (isMergeQuestionLines) {
+                // Merge continuation lines of question text (lines that don't start with A-D. or new question)
+                text = text.replace(/((?:Câu|Question|Bài)\s+\d+[:.]?\s*.+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
+            }
+            
+            if (text !== textBefore) {
+                // Calculate new cursor position based on text changes before cursor
+                const beforeCursor = textBefore.substring(0, cursorPos);
+                let newBeforeCursor = beforeCursor;
+                if (isMergeLines) {
+                    newBeforeCursor = newBeforeCursor.replace(/([^\n])\s{2,}(\*?[A-D])\.\s+/g, '$1\n$2. ');
+                    newBeforeCursor = newBeforeCursor.replace(/([^\n])\s+(\*?[A-D])\.\s+/g, (match, before, label) => {
+                        if (/[.;,a-zA-Z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ)]$/.test(before.trim())) {
+                            return before + '\n' + label + '. ';
+                        }
+                        return match;
+                    });
+                    newBeforeCursor = newBeforeCursor.replace(/([A-D]\..+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
+                }
+                if (isMergeQuestionLines) {
+                    newBeforeCursor = newBeforeCursor.replace(/((?:Câu|Question|Bài)\s+\d+[:.]?\s*.+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
+                }
+                editor.value = text;
+                editor.setSelectionRange(newBeforeCursor.length, newBeforeCursor.length);
+            }
+        }
+        
+        editor.addEventListener('input', () => { autoFormatEditor(); window.updateHighlight(); isDebounceEnabled ? debouncedInput() : (renderPreview(), window.saveDraft(), safeHighlight()); });
         editor.addEventListener('keyup', (e) => { if(e.key !== 'Tab' && e.key !== 'Enter') safeHighlight(); });
         editor.addEventListener('click', safeHighlight);
         editor.addEventListener('keydown', function(e) { 
@@ -1344,7 +1360,7 @@ window.saveQuiz = function() {
         function createOptionButton(opt, qIdx, oIdx, isTaking) {
             const btn = document.createElement('button'); if (!isTaking) btn.setAttribute('tabindex', '-1');
             btn.className = `w-full text-left p-4 border rounded-xl transition-all flex items-start gap-4 group shadow-sm bg-white ${isTaking ? 'hover:shadow-md hover:border-blue-300' : (opt.correct ? 'bg-green-50 border-green-400 text-green-800' : 'hover:bg-gray-50')}`; 
-            btn.innerHTML = `<div class="font-bold text-lg shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 ${opt.correct && !isTaking ? 'bg-green-200 text-green-800' : 'group-hover:bg-blue-100 group-hover:text-blue-600'}">${opt.label}</div><div class="flex-1 text-gray-700 mt-1 ${isMergeLines ? '' : 'preserve-lines'}">${window.formatContent(opt.text)}</div>`;
+            btn.innerHTML = `<div class="font-bold text-lg shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 ${opt.correct && !isTaking ? 'bg-green-200 text-green-800' : 'group-hover:bg-blue-100 group-hover:text-blue-600'}">${opt.label}</div><div class="flex-1 text-gray-700 mt-1">${window.formatContent(opt.text)}</div>`;
             return btn;
         }
 
@@ -1357,7 +1373,7 @@ window.saveQuiz = function() {
             let textColor = opt.correct ? 'text-blue-700 font-medium' : 'text-gray-700';
             let hoverBorder = opt.correct ? '' : 'group-hover:border-blue-400 group-hover:text-blue-600';
 
-            btn.innerHTML = `<div class="font-bold text-[14px] shrink-0 w-[36px] rounded border flex items-center justify-center bg-white transition-colors ${borderColor} ${textColor} ${hoverBorder}">${opt.label}</div><div class="flex-1 text-[14px] bg-white border rounded px-3 py-1.5 transition-colors ${isMergeLines ? '' : 'preserve-lines'} ${borderColor} ${textColor} ${hoverBorder}">${window.formatContent(opt.text)}</div>`;
+            btn.innerHTML = `<div class="font-bold text-[14px] shrink-0 w-[36px] rounded border flex items-center justify-center bg-white transition-colors ${borderColor} ${textColor} ${hoverBorder}">${opt.label}</div><div class="flex-1 text-[14px] bg-white border rounded px-3 py-1.5 transition-colors ${borderColor} ${textColor} ${hoverBorder}">${window.formatContent(opt.text)}</div>`;
             return btn;
         }
 
@@ -1796,7 +1812,19 @@ window.resumeSavedQuiz = function() {
 
         // GÁN EVENT LISTENER CHO CÁC PHÍM CHỨC NĂNG
         quizTitleInput.addEventListener('input', window.saveDraft);
-        mergeToggle.addEventListener('change', (e) => { isMergeLines = e.target.checked; renderPreview(); if(currentQuizData.length>0 && !document.getElementById('quiz-area').classList.contains('hidden')){ renderQuizForTaking(currentQuizData); Object.keys(userAnswers).forEach(i => document.getElementById(`q-nav-${i}`)?.classList.add('answered')); } });
+        mergeToggle.addEventListener('change', (e) => { 
+            isMergeLines = e.target.checked; 
+            if (isMergeLines) { autoFormatEditor(); window.updateHighlight(); }
+            renderPreview(); 
+            window.saveDraft();
+            if(currentQuizData.length>0 && !document.getElementById('quiz-area').classList.contains('hidden')){ renderQuizForTaking(currentQuizData); Object.keys(userAnswers).forEach(i => document.getElementById(`q-nav-${i}`)?.classList.add('answered')); } 
+        });
+        mergeQuestionToggle.addEventListener('change', (e) => { 
+            isMergeQuestionLines = e.target.checked; 
+            if (isMergeQuestionLines) { autoFormatEditor(); window.updateHighlight(); }
+            renderPreview(); 
+            window.saveDraft();
+        });
         debounceToggle.addEventListener('change', (e) => isDebounceEnabled = e.target.checked);
         shuffleToggle.addEventListener('change', (e) => isShuffleEnabled = e.target.checked);
         if(autocompleteToggle) autocompleteToggle.addEventListener('change', (e) => isAutoCompleteEnabled = e.target.checked);

@@ -1252,12 +1252,13 @@ window.saveQuiz = function() {
                     document.querySelectorAll('.active-preview-q').forEach(el => el.classList.remove('active-preview-q'));
                     const target = document.getElementById(`preview-q-${actIdx}`);
                     if (target) { 
-                        // Force-render if not yet loaded by lazy loading
-                        if (target.dataset.loaded !== 'true' && cachedQuestions[actIdx]) {
-                            renderQuestionContent(target, cachedQuestions[actIdx], actIdx);
+                        // Force math render if not yet done
+                        if (target.dataset.mathRendered !== 'true') {
+                            target.dataset.mathRendered = 'true';
+                            renderMath(target);
                         }
                         target.classList.add('active-preview-q'); 
-                        target.scrollIntoView({ behavior: 'smooth', block: 'start' }); 
+                        preview.scrollTo({ top: target.offsetTop - preview.offsetTop, behavior: 'smooth' });
                     }
                 }
             }, 50); 
@@ -1360,62 +1361,50 @@ window.saveQuiz = function() {
             return btn;
         }
 
-        // Lazy loading observer for preview questions
-        let previewObserver = null;
-        let cachedQuestions = [];
-
-        function renderQuestionContent(div, q, qIdx) {
-            const isFixed = q.isFixed;
-            const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
-            const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-2 right-2 p-1.5 rounded-md border transition-all ${pinBtnColor} scale-90 flex items-center justify-center" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}"><svg class="w-4 h-4" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></button>`;
-            
-            const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
-
-            div.innerHTML = `<div class="relative font-medium mb-3 whitespace-pre-wrap text-[15px] border border-gray-300 rounded bg-white p-3 text-gray-800 pr-10 shadow-sm">${displayTitle}${pinBtnHtml}</div>`;
-            const optDiv = document.createElement('div'); optDiv.className = 'space-y-1.5';
-            q.options.forEach((opt, oIdx) => { 
-                const btn = createPreviewOptionButton(opt, qIdx, oIdx); 
-                btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); 
-                optDiv.appendChild(btn); 
-            });
-            div.appendChild(optDiv);
-            div.dataset.loaded = 'true';
-            renderMath(div);
-        }
+        // Lazy math rendering observer - renders HTML immediately, defers expensive KaTeX
+        let mathObserver = null;
 
         function renderPreview() {
             const qs = parseEditorContent(); 
-            cachedQuestions = qs;
             preview.innerHTML = '';
             
             // Cleanup old observer
-            if (previewObserver) { previewObserver.disconnect(); previewObserver = null; }
+            if (mathObserver) { mathObserver.disconnect(); mathObserver = null; }
             
             if (qs.length === 0) { preview.innerHTML = '<p class="text-gray-400 italic text-center mt-10">Chưa có nội dung...</p>'; return; }
             
-            // Create IntersectionObserver for lazy loading
-            previewObserver = new IntersectionObserver((entries) => {
+            // Create IntersectionObserver for lazy MATH rendering only
+            mathObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting && entry.target.dataset.loaded !== 'true') {
-                        const idx = parseInt(entry.target.dataset.qidx);
-                        if (cachedQuestions[idx]) {
-                            renderQuestionContent(entry.target, cachedQuestions[idx], idx);
-                        }
+                    if (entry.isIntersecting && entry.target.dataset.mathRendered !== 'true') {
+                        entry.target.dataset.mathRendered = 'true';
+                        renderMath(entry.target);
                     }
                 });
-            }, { root: preview, rootMargin: '200px 0px' });
+            }, { root: preview, rootMargin: '300px 0px' });
             
-            // Create lightweight placeholders for all questions
+            // Render ALL question HTML immediately (fast) - only defer math rendering (slow)
             qs.forEach((q, qIdx) => {
                 const div = document.createElement('div'); 
                 div.className = 'mb-6 relative'; 
                 div.id = `preview-q-${qIdx}`;
-                div.dataset.qidx = qIdx;
-                // Minimal placeholder with estimated height
-                div.innerHTML = `<div class="text-[15px] border border-gray-200 rounded bg-gray-50 p-3 text-gray-400 italic">Câu ${qIdx + 1}...</div>`;
-                div.style.minHeight = '120px';
+                
+                const isFixed = q.isFixed;
+                const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
+                const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-2 right-2 p-1.5 rounded-md border transition-all ${pinBtnColor} scale-90 flex items-center justify-center" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}"><svg class="w-4 h-4" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></button>`;
+                
+                const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
+
+                div.innerHTML = `<div class="relative font-medium mb-3 whitespace-pre-wrap text-[15px] border border-gray-300 rounded bg-white p-3 text-gray-800 pr-10 shadow-sm">${displayTitle}${pinBtnHtml}</div>`;
+                const optDiv = document.createElement('div'); optDiv.className = 'space-y-1.5';
+                q.options.forEach((opt, oIdx) => { 
+                    const btn = createPreviewOptionButton(opt, qIdx, oIdx); 
+                    btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); 
+                    optDiv.appendChild(btn); 
+                });
+                div.appendChild(optDiv); 
                 preview.appendChild(div);
-                previewObserver.observe(div);
+                mathObserver.observe(div);
             });
         }
 

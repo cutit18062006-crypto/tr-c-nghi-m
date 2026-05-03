@@ -1266,13 +1266,18 @@ window.saveQuiz = function() {
             
             if (isMergeLines) {
                 // Convert horizontal answers to vertical (e.g. "A. x  B. y" → "A. x\nB. y")
-                text = text.replace(/([^\n])\s{2,}(\*?[A-D])\.\s+/g, '$1\n$2. ');
-                text = text.replace(/([^\n])\s+(\*?[A-D])\.\s+/g, (match, before, label) => {
-                    if (/[.;,a-zA-Z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ)]$/.test(before.trim())) {
-                        return before + '\n' + label + '. ';
-                    }
-                    return match;
+                // Safe split: 2+ spaces or tab
+                text = text.replace(/([^\n])(?:[\t]|\s{2,})(\*?[A-D])\.\s+/g, '$1\n$2. ');
+                
+                // Smart sequence split for 1-space separation
+                text = text.replace(/([^\n])\s+(\*?A)\.\s+(?=[^\n]*?\s+\*?B\.\s+)/g, (match, before, label) => {
+                    if (/\d/.test(before)) return match; // Prevent splitting "800 A." (Amperes)
+                    return before + '\n' + label + '. ';
                 });
+                text = text.replace(/(\*?A\.\s+[^\n]*?)([^\n])\s+(\*?B)\.\s+/g, '$1$2\n$3. ');
+                text = text.replace(/(\*?B\.\s+[^\n]*?)([^\n])\s+(\*?C)\.\s+/g, '$1$2\n$3. ');
+                text = text.replace(/(\*?C\.\s+[^\n]*?)([^\n])\s+(\*?D)\.\s+/g, '$1$2\n$3. ');
+
                 // Merge continuation lines into previous answer line
                 text = text.replace(/([A-D]\..+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
             }
@@ -1287,13 +1292,15 @@ window.saveQuiz = function() {
                 const beforeCursor = textBefore.substring(0, cursorPos);
                 let newBeforeCursor = beforeCursor;
                 if (isMergeLines) {
-                    newBeforeCursor = newBeforeCursor.replace(/([^\n])\s{2,}(\*?[A-D])\.\s+/g, '$1\n$2. ');
-                    newBeforeCursor = newBeforeCursor.replace(/([^\n])\s+(\*?[A-D])\.\s+/g, (match, before, label) => {
-                        if (/[.;,a-zA-Z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ)]$/.test(before.trim())) {
-                            return before + '\n' + label + '. ';
-                        }
-                        return match;
+                    newBeforeCursor = newBeforeCursor.replace(/([^\n])(?:[\t]|\s{2,})(\*?[A-D])\.\s+/g, '$1\n$2. ');
+                    newBeforeCursor = newBeforeCursor.replace(/([^\n])\s+(\*?A)\.\s+(?=[^\n]*?\s+\*?B\.\s+)/g, (match, before, label) => {
+                        if (/\d/.test(before)) return match;
+                        return before + '\n' + label + '. ';
                     });
+                    newBeforeCursor = newBeforeCursor.replace(/(\*?A\.\s+[^\n]*?)([^\n])\s+(\*?B)\.\s+/g, '$1$2\n$3. ');
+                    newBeforeCursor = newBeforeCursor.replace(/(\*?B\.\s+[^\n]*?)([^\n])\s+(\*?C)\.\s+/g, '$1$2\n$3. ');
+                    newBeforeCursor = newBeforeCursor.replace(/(\*?C\.\s+[^\n]*?)([^\n])\s+(\*?D)\.\s+/g, '$1$2\n$3. ');
+                    
                     newBeforeCursor = newBeforeCursor.replace(/([A-D]\..+)\n(?!\s*(?:Câu|Question|Bài)\s+\d|\s*\*?[A-D]\.\s|\s*$)/gim, '$1 ');
                 }
                 if (isMergeQuestionLines) {

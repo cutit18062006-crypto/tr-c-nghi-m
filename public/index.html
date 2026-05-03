@@ -1251,7 +1251,14 @@ window.saveQuiz = function() {
                 if (actIdx !== -1) {
                     document.querySelectorAll('.active-preview-q').forEach(el => el.classList.remove('active-preview-q'));
                     const target = document.getElementById(`preview-q-${actIdx}`);
-                    if (target) { target.classList.add('active-preview-q'); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                    if (target) { 
+                        // Force-render if not yet loaded by lazy loading
+                        if (target.dataset.loaded !== 'true' && cachedQuestions[actIdx]) {
+                            renderQuestionContent(target, cachedQuestions[actIdx], actIdx);
+                        }
+                        target.classList.add('active-preview-q'); 
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' }); 
+                    }
                 }
             }, 50); 
         }

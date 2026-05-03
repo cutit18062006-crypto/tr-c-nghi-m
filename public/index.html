@@ -1353,28 +1353,63 @@ window.saveQuiz = function() {
             return btn;
         }
 
-        function renderPreview() {
-            const qs = parseEditorContent(); preview.innerHTML = '';
-            if (qs.length === 0) { preview.innerHTML = '<p class="text-gray-400 italic text-center mt-10">Chưa có nội dung...</p>'; return; }
-            qs.forEach((q, qIdx) => {
-                const div = document.createElement('div'); div.className = 'mb-6 relative'; div.id = `preview-q-${qIdx}`; 
-                
-                const isFixed = q.isFixed;
-                const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
-                const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-2 right-2 p-1.5 rounded-md border transition-all ${pinBtnColor} scale-90 flex items-center justify-center" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}"><svg class="w-4 h-4" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></button>`;
-                
-                const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
+        // Lazy loading observer for preview questions
+        let previewObserver = null;
+        let cachedQuestions = [];
 
-                div.innerHTML = `<div class="relative font-medium mb-3 whitespace-pre-wrap text-[15px] border border-gray-300 rounded bg-white p-3 text-gray-800 pr-10 shadow-sm">${displayTitle}${pinBtnHtml}</div>`;
-                const optDiv = document.createElement('div'); optDiv.className = 'space-y-1.5';
-                q.options.forEach((opt, oIdx) => { 
-                    const btn = createPreviewOptionButton(opt, qIdx, oIdx); 
-                    btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); 
-                    optDiv.appendChild(btn); 
-                });
-                div.appendChild(optDiv); preview.appendChild(div);
+        function renderQuestionContent(div, q, qIdx) {
+            const isFixed = q.isFixed;
+            const pinBtnColor = isFixed ? 'text-blue-600 bg-blue-100 border-blue-300' : 'text-gray-400 hover:text-blue-600 hover:bg-gray-100 border-transparent';
+            const pinBtnHtml = `<button onclick="window.togglePinQuestion(${qIdx})" class="absolute top-2 right-2 p-1.5 rounded-md border transition-all ${pinBtnColor} scale-90 flex items-center justify-center" title="${isFixed ? 'Bỏ cố định đáp án' : 'Cố định đáp án không đảo'}"><svg class="w-4 h-4" fill="${isFixed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></button>`;
+            
+            const displayTitle = window.formatContent(q.questionText.replace(/\[pin\]|\[cố định\]/gi, '').trim());
+
+            div.innerHTML = `<div class="relative font-medium mb-3 whitespace-pre-wrap text-[15px] border border-gray-300 rounded bg-white p-3 text-gray-800 pr-10 shadow-sm">${displayTitle}${pinBtnHtml}</div>`;
+            const optDiv = document.createElement('div'); optDiv.className = 'space-y-1.5';
+            q.options.forEach((opt, oIdx) => { 
+                const btn = createPreviewOptionButton(opt, qIdx, oIdx); 
+                btn.onclick = () => window.handlePreviewClick(qIdx, oIdx, q.startIndex); 
+                optDiv.appendChild(btn); 
             });
-            renderMath(preview);
+            div.appendChild(optDiv);
+            div.dataset.loaded = 'true';
+            renderMath(div);
+        }
+
+        function renderPreview() {
+            const qs = parseEditorContent(); 
+            cachedQuestions = qs;
+            preview.innerHTML = '';
+            
+            // Cleanup old observer
+            if (previewObserver) { previewObserver.disconnect(); previewObserver = null; }
+            
+            if (qs.length === 0) { preview.innerHTML = '<p class="text-gray-400 italic text-center mt-10">Chưa có nội dung...</p>'; return; }
+            
+            // Create IntersectionObserver for lazy loading
+            previewObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && entry.target.dataset.loaded !== 'true') {
+                        const idx = parseInt(entry.target.dataset.qidx);
+                        if (cachedQuestions[idx]) {
+                            renderQuestionContent(entry.target, cachedQuestions[idx], idx);
+                        }
+                    }
+                });
+            }, { root: preview, rootMargin: '200px 0px' });
+            
+            // Create lightweight placeholders for all questions
+            qs.forEach((q, qIdx) => {
+                const div = document.createElement('div'); 
+                div.className = 'mb-6 relative'; 
+                div.id = `preview-q-${qIdx}`;
+                div.dataset.qidx = qIdx;
+                // Minimal placeholder with estimated height
+                div.innerHTML = `<div class="text-[15px] border border-gray-200 rounded bg-gray-50 p-3 text-gray-400 italic">Câu ${qIdx + 1}...</div>`;
+                div.style.minHeight = '120px';
+                preview.appendChild(div);
+                previewObserver.observe(div);
+            });
         }
 
         window.togglePinQuestion = function(qIdx) {

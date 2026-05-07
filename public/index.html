@@ -587,7 +587,7 @@ return questions;
                 const match = lines[i].match(regex);
                 if (match) { lines[i] = `${String.fromCharCode(65 + currentOptionIndex)}. ${match[1].trim()}`; currentOptionIndex++; count++; }
             }
-            if (count > 0) { editor.value = lines.join('\n'); if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); } showToast(`Đã chuẩn hóa ${count} đáp án`); } 
+            if (count > 0) { editor.value = lines.join('\n'); window.updateHighlight(); if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); } showToast(`Đã chuẩn hóa ${count} đáp án`); } 
             else alert(`Không tìm thấy ký tự "${prefix}" đứng đầu dòng nào.`);
         };
 
@@ -620,6 +620,7 @@ return questions;
             if (!ft) return alert("Vui lòng nhập từ cần tìm!");
             if (!editor.value.includes(ft)) return alert(`Không tìm thấy "${ft}".`);
             editor.value = editor.value.replaceAll(ft, rt);
+            window.updateHighlight();
             if(isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
             showToast("Thay thế thành công");
             window.closeFindReplaceModal();
@@ -1031,8 +1032,11 @@ window.saveQuiz = function() {
                 .then(data => {
                     if (data.secure_url) {
                         const imgTag = `[img:${data.secure_url}]`;
+                        editor.focus();
                         const start = editor.selectionStart, end = editor.selectionEnd;
-                        editor.setRangeText(imgTag, start, end, 'end');
+                        editor.setSelectionRange(start, end);
+                        document.execCommand('insertText', false, imgTag);
+                        window.updateHighlight();
                         
                         draftStatus.textContent = "Tải ảnh thành công!";
                         setTimeout(() => draftStatus.classList.add('hidden'), 2000);
@@ -1125,6 +1129,7 @@ window.saveQuiz = function() {
                     const finalText = finalDiv.textContent || finalDiv.innerText || "";
 
                     editor.value = (editor.value ? editor.value + "\n\n" : "") + finalText.trim();
+                    window.updateHighlight();
                     
                     if (isDebounceEnabled) debouncedInput(); else { renderPreview(); window.saveDraft(); safeHighlight(); }
                     

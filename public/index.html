@@ -111,6 +111,40 @@
         </div>
     </div>
 
+    <!-- MODAL CHIA ĐỀ -->
+    <div id="split-quiz-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="modal-content bg-white rounded-xl shadow-2xl p-6 w-[28rem] border border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 mb-1 flex items-center gap-2">
+                <svg class="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>
+                Chia Đề Thành Nhiều Phần
+            </h3>
+            <p class="text-xs text-gray-500 mb-5">Chia một đề lớn thành các đề nhỏ hơn. Phần cuối sẽ tự động nhận tất cả câu còn thừa.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tổng số câu hiện tại</label>
+                    <div id="split-total-count" class="w-full p-2 border border-gray-200 rounded bg-gray-50 text-sm font-mono text-gray-700">0 câu</div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Số câu mỗi đề</label>
+                    <input type="number" id="split-size-input" min="1" class="w-full p-2 border border-gray-300 rounded focus:border-violet-500 outline-none text-sm" placeholder="Ví dụ: 50">
+                </div>
+                <div id="split-preview-info" class="hidden p-3 bg-violet-50 border border-violet-200 rounded-lg text-sm text-violet-800"></div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tên đề (tùy chọn)</label>
+                    <input type="text" id="split-title-input" class="w-full p-2 border border-gray-300 rounded focus:border-violet-500 outline-none text-sm" placeholder="Ví dụ: De_Thi_Mon_Hoc">
+                    <p class="text-xs text-gray-400 mt-1">Mỗi file sẽ được đặt tên: <i>TenDe_Phan_1.json</i>, <i>TenDe_Phan_2.json</i>...</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="window.closeSplitQuizModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium">Hủy</button>
+                <button onclick="window.executeSplitQuiz()" class="px-4 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 font-bold flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    Tải xuống tất cả
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- SIDEBAR -->
     <aside id="sidebar" class="w-72 bg-white shadow-xl flex flex-col z-20 shrink-0 h-full border-r relative overflow-hidden">
         <div class="p-6 border-b flex items-center gap-2 shrink-0 min-w-[18rem]"> 
@@ -195,6 +229,10 @@
                         <div class="w-px h-6 bg-gray-300 mx-1"></div>
                         <label class="relative p-2 rounded bg-yellow-100 text-yellow-600 hover:bg-yellow-200 cursor-pointer text-xs font-bold">Sửa Đề Cũ (.json)<input type="file" id="edit-upload" accept=".json" class="hidden"/></label>
                         <label class="relative p-2 rounded bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer text-xs font-bold">Gộp Đề (.json)<input type="file" id="merge-upload" multiple accept=".json" class="hidden"/></label>
+                        <button onclick="window.openSplitQuizModal()" class="p-2 rounded bg-violet-100 text-violet-700 hover:bg-violet-200 text-xs font-bold flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>
+                            Chia Đề
+                        </button>
                     </div>
                 </div>
 
@@ -1211,6 +1249,118 @@ window.saveQuiz = function() {
             if(res.success && res.data.questions) startQuiz(res.data); else alert("File bài thi không hợp lệ!");
             e.target.value = '';
         });
+
+        // =================================================================
+        // TÍNH NĂNG CHIA ĐỀ THÀNH NHIỀU PHẦN
+        // =================================================================
+        window.openSplitQuizModal = function() {
+            const qs = parseEditorContent();
+            const total = qs.length;
+            document.getElementById('split-total-count').textContent = total + ' câu';
+            document.getElementById('split-size-input').value = '';
+            document.getElementById('split-title-input').value = quizTitleInput.value.trim() || 'De_Thi';
+            document.getElementById('split-preview-info').classList.add('hidden');
+            document.getElementById('split-quiz-modal').classList.remove('hidden');
+            document.getElementById('split-size-input').focus();
+
+            // Live preview khi nhập số câu
+            const sizeInput = document.getElementById('split-size-input');
+            sizeInput.oninput = function() {
+                const size = parseInt(this.value);
+                const info = document.getElementById('split-preview-info');
+                if (!size || size <= 0 || size > total) { info.classList.add('hidden'); return; }
+                const numFull = Math.floor(total / size);
+                const remainder = total % size;
+                let desc = '';
+                if (remainder === 0) {
+                    desc = `Sẽ tạo <b>${numFull} đề</b>, mỗi đề gồm <b>${size} câu</b>.`;
+                } else {
+                    desc = `Sẽ tạo <b>${numFull} đề</b> × ${size} câu + <b>1 đề cuối</b> gồm <b>${size + remainder} câu</b> (${size} + ${remainder} câu thừa). Tổng: <b>${numFull + 1} file</b>.`;
+                }
+                info.innerHTML = desc;
+                info.classList.remove('hidden');
+            };
+        };
+
+        window.closeSplitQuizModal = function() {
+            document.getElementById('split-quiz-modal').classList.add('hidden');
+        };
+
+        window.executeSplitQuiz = async function() {
+            const qs = parseEditorContent();
+            if (qs.length === 0) return alert('Chưa có câu hỏi nào trong đề!');
+
+            const sizeRaw = parseInt(document.getElementById('split-size-input').value);
+            if (!sizeRaw || sizeRaw <= 0) return alert('Vui lòng nhập số câu hợp lệ!');
+            if (sizeRaw >= qs.length) return alert(`Số câu mỗi đề (${sizeRaw}) phải nhỏ hơn tổng số câu (${qs.length})!`);
+
+            const baseTitle = (document.getElementById('split-title-input').value.trim() || quizTitleInput.value.trim() || 'De_Thi').replace(/[^a-z0-9_\-]/gi, '_');
+
+            // Chia thành các nhóm - phần cuối nhận toàn bộ câu thừa
+            const numFullParts = Math.floor(qs.length / sizeRaw);
+            const remainder = qs.length % sizeRaw;
+            const parts = [];
+
+            for (let i = 0; i < numFullParts; i++) {
+                parts.push(qs.slice(i * sizeRaw, (i + 1) * sizeRaw));
+            }
+            // Nếu còn thừa, gộp vào phần cuối thay vì tạo một file nhỏ riêng lẻ
+            if (remainder > 0 && parts.length > 0) {
+                // Thêm phần thừa vào phần cuối
+                const lastPart = parts[parts.length - 1];
+                const extraQs = qs.slice(numFullParts * sizeRaw);
+                parts[parts.length - 1] = lastPart.concat(extraQs);
+            } else if (remainder > 0 && parts.length === 0) {
+                // Chỉ có 1 phần (ít câu hơn sizeRaw - trường hợp này đã check trên)
+                parts.push(qs);
+            }
+
+            // Đánh lại số thứ tự trong từng phần
+            for (let partIdx = 0; partIdx < parts.length; partIdx++) {
+                const partQs = parts[partIdx];
+                partQs.forEach((q, i) => { q.originalPrefix = `Câu ${i + 1}:`; });
+            }
+
+            // Lấy ảnh đang dùng trong toàn bộ đề để phân bổ theo từng phần
+            const usedImagesGlobal = {};
+            const imgRegex = /\[img:(.*?)\]/g;
+            let m;
+            while ((m = imgRegex.exec(JSON.stringify(qs))) !== null) {
+                if (localImages[m[1]]) usedImagesGlobal[m[1]] = localImages[m[1]];
+            }
+
+            // Tải từng file với độ trễ nhỏ để tránh trình duyệt chặn
+            showToast(`Đang tạo ${parts.length} file...`);
+            window.closeSplitQuizModal();
+
+            for (let i = 0; i < parts.length; i++) {
+                const partQs = parts[i];
+                const partTitle = `${baseTitle}_Phan_${i + 1}`;
+
+                // Lọc chỉ lấy ảnh dùng trong phần này
+                const partImages = {};
+                const partStr = JSON.stringify(partQs);
+                const re2 = /\[img:(.*?)\]/g;
+                let m2;
+                while ((m2 = re2.exec(partStr)) !== null) {
+                    if (usedImagesGlobal[m2[1]]) partImages[m2[1]] = usedImagesGlobal[m2[1]];
+                }
+
+                const blob = new Blob([JSON.stringify({ title: partTitle, questions: partQs, images: partImages }, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = partTitle + '.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+
+                // Dừng nhẹ giữa các lần tải để tránh bị trình duyệt chặn
+                if (i < parts.length - 1) await new Promise(r => setTimeout(r, 300));
+            }
+
+            showToast(`✅ Đã chia thành ${parts.length} đề thành công!`);
+        };
 
         let inputTimeout, highlightTimeout;
         const debouncedInput = () => { clearTimeout(inputTimeout); inputTimeout = setTimeout(() => { const st = preview.scrollTop; renderPreview(); preview.scrollTop = st; window.saveDraft(); safeHighlight(); }, 500); };

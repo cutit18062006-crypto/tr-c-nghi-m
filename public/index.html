@@ -38,6 +38,12 @@
         .toggle-checkbox:checked + .toggle-label { background-color: #68D391; }
         .q-nav-btn { transition: all 0.2s; }
         .q-nav-btn.answered { background-color: #2563eb; color: white; border-color: #2563eb; }
+        .q-nav-btn.flagged { border-color: #f59e0b; box-shadow: inset 0 0 0 2px #f59e0b; }
+        .q-nav-btn.answered.flagged { box-shadow: inset 0 0 0 2px #f59e0b; }
+        .flag-btn { position: absolute; top: 0.75rem; right: 0.75rem; padding: 0.4rem; border-radius: 0.5rem; border: 1.5px solid transparent; cursor: pointer; transition: all 0.2s ease; z-index: 5; background: white; }
+        .flag-btn:hover { background-color: #fef3c7; border-color: #fbbf24; }
+        .flag-btn.flagged { background-color: #fef3c7; border-color: #f59e0b; color: #d97706; }
+        .flag-btn svg { width: 1.25rem; height: 1.25rem; }
         .active-preview-q { border-left: 4px solid #3b82f6 !important; background-color: #eff6ff !important; transform: scale(1.01); transition: all 0.2s ease; }
         @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .modal-content { animation: popIn 0.2s ease-out; }
@@ -297,6 +303,7 @@
                             <div><span class="text-xs text-gray-500 font-bold">KẾT QUẢ</span><br><span id="score-detail" class="text-sm font-medium">0/0 đúng</span></div>
                         </div>
                         <div class="flex items-center gap-3">
+                            <button onclick="window.saveFlaggedQuestionsToFile()" id="footer-save-flagged-btn" class="hidden bg-amber-100 text-amber-700 px-4 py-2 rounded-lg font-bold flex items-center gap-1.5"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M4 2h14l1 1v9l-1 1H9l-3 3v-3H4l-1-1V3l1-1zm1 1v8h3v2l2-2h8V3H5z"/><path d="M5 3h12v6H9L7 11V9H5V3z"/></svg>Lưu câu đã cắm cờ</button>
                             <button onclick="window.saveWrongQuestionsToFile()" id="footer-save-wrong-btn" class="hidden bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-bold">Lưu câu sai</button>
                             <button onclick="window.retryWrong()" id="btn-retry" class="hidden bg-yellow-500 text-white px-5 py-2 rounded-lg font-bold">Làm lại câu sai</button>
                             <button onclick="window.resetQuiz()" class="bg-gray-100 text-gray-700 px-5 py-2 rounded-lg font-bold">Đề khác</button>
@@ -331,6 +338,7 @@
         const scoreMessage = document.getElementById('score-message');
         const scoreDetail = document.getElementById('score-detail');
         const footerSaveBtn = document.getElementById('footer-save-wrong-btn');
+        const footerSaveFlaggedBtn = document.getElementById('footer-save-flagged-btn');
         const btnRetry = document.getElementById('btn-retry');
         const resumeAlert = document.getElementById('resume-alert');
         const draftStatus = document.getElementById('draft-status');
@@ -355,6 +363,7 @@
         // Biến toàn cục logic
         let currentQuizData = []; 
         let userAnswers = {}; 
+        let flaggedQuestions = new Set(); // Câu hỏi được cắm cờ trong lúc thi
         let localImages = {}; // Kho chứa ảnh Offline Base64
         
         let isMergeLines = mergeToggle.checked;
@@ -1680,6 +1689,7 @@ window.saveQuiz = function() {
                 title: document.getElementById('take-title').textContent,
                 questions: currentQuizData,
                 answers: userAnswers,
+                flagged: Array.from(flaggedQuestions), // Lưu danh sách câu đã cắm cờ
                 images: {}, // Data ko có ảnh (rất nhẹ)
                 scrollPosition: scrollContainer ? scrollContainer.scrollTop : 0
             };
@@ -1733,6 +1743,7 @@ window.resumeSavedQuiz = function() {
         const data = JSON.parse(saved); 
         currentQuizData = data.questions || []; 
         userAnswers = data.answers || {};
+        flaggedQuestions = new Set(data.flagged || []); // Khôi phục danh sách câu đã cắm cờ
         if (data.images) Object.assign(localImages, data.images); 
         
         document.getElementById('take-title').textContent = data.title || "Bài thi";
@@ -1786,6 +1797,7 @@ window.resumeSavedQuiz = function() {
     
     currentQuizData = qs; 
     userAnswers = {};
+    flaggedQuestions = new Set(); // Reset cờ khi bắt đầu đề mới
     document.getElementById('take-title').textContent = data.title || "Bài tập";
     document.getElementById('upload-area').classList.add('hidden'); 
     document.getElementById('quiz-area').classList.remove('hidden');
@@ -1818,6 +1830,7 @@ window.resumeSavedQuiz = function() {
             quizFooter.classList.add('hidden'); 
             currentQuizData = []; 
             userAnswers = {};
+            flaggedQuestions = new Set();
             checkAndShowResume();
         };
 
@@ -1827,6 +1840,7 @@ window.resumeSavedQuiz = function() {
                 const btn = document.createElement('button');
                 btn.textContent = (i + 1).toString().padStart(2, '0');
                 btn.className = `q-nav-btn w-full aspect-square flex items-center justify-center rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:border-blue-400 focus:outline-none`;
+                if (flaggedQuestions.has(i)) btn.classList.add('flagged');
                 btn.id = `q-nav-${i}`;
                 btn.onclick = () => { const el = document.querySelector(`div[data-idx="${i}"]`); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('ring-2', 'ring-blue-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1500); } };
                 questionGrid.appendChild(btn);
@@ -1837,9 +1851,11 @@ window.resumeSavedQuiz = function() {
         function renderQuizForTaking(qs) {
             const container = document.getElementById('quiz-container'); container.innerHTML = '';
             qs.forEach((q, idx) => {
-                const div = document.createElement('div'); div.className = 'bg-white p-8 rounded-2xl border border-gray-100 shadow-lg question-block'; div.dataset.idx = idx;
+                const div = document.createElement('div'); div.className = 'bg-white p-8 rounded-2xl border border-gray-100 shadow-lg question-block relative'; div.dataset.idx = idx;
                 const cleanT = (q.cleanText !== undefined ? q.cleanText : (q.questionText || "").replace(/^(Câu|Bài|Question)\s+\d+[:.]?\s*/i, '')).replace(/\[pin\]|\[cố định\]/gi, '');
-                div.innerHTML = `<div class="flex gap-4 mb-6"><div class="shrink-0 w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-md">${idx + 1}</div><div class="flex-1 pt-1 text-xl font-semibold text-gray-800 whitespace-pre-wrap leading-relaxed">${window.formatContent(cleanT)}</div></div>`;
+                const isFlagged = flaggedQuestions.has(idx);
+                const flagBtnHtml = `<button onclick="window.toggleFlagQuestion(${idx})" class="flag-btn${isFlagged ? ' flagged' : ''}" title="${isFlagged ? 'Bỏ cắm cờ' : 'Cắm cờ câu này'}"><svg fill="${isFlagged ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-18m0 0l2-1h6l1 1h5l2 1v10l-2-1h-5l-1-1h-6l-2 1z"/></svg></button>`;
+                div.innerHTML = `${flagBtnHtml}<div class="flex gap-4 mb-6 pr-10"><div class="shrink-0 w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-md">${idx + 1}</div><div class="flex-1 pt-1 text-xl font-semibold text-gray-800 whitespace-pre-wrap leading-relaxed">${window.formatContent(cleanT)}</div></div>`;
                 const optDiv = document.createElement('div'); optDiv.className = "grid gap-4 options-grid mt-6";
                 if(q.options) {
                     q.options.forEach((opt, oIdx) => {
@@ -1973,6 +1989,7 @@ window.resumeSavedQuiz = function() {
             document.getElementById('score-detail').textContent = `${correct}/${total} câu đúng`;
             document.getElementById('score-message').textContent = score >= 9 ? "Xuất sắc!" : score >= 7 ? "Khá tốt" : score >= 5 ? "Cố gắng hơn" : "Cần ôn tập";
             footerSaveBtn.classList.toggle('hidden', correct === total); btnRetry.classList.toggle('hidden', correct === total);
+            footerSaveFlaggedBtn.classList.toggle('hidden', flaggedQuestions.size === 0);
             quizFooter.classList.remove('hidden', 'footer-hidden'); isFooterVisible = true; quizFooter.style.left = isSidebarOpen ? "18rem" : "0";
         }
 
@@ -1986,7 +2003,7 @@ window.resumeSavedQuiz = function() {
     }
 });
             if (isShuffleEnabled) qs = window.shuffleArray(qs);
-            currentQuizData = qs; userAnswers = {}; 
+            currentQuizData = qs; userAnswers = {}; flaggedQuestions = new Set();
             
             window.safeSaveProgress();
             
@@ -2017,6 +2034,59 @@ window.resumeSavedQuiz = function() {
             // Đổi `images: localImages` thành `images: usedImages`
             const blob = new Blob([JSON.stringify({title: t, questions: wqs, images: usedImages}, null, 2)], { type: 'application/json' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = t.replace(/[^a-z0-9]/gi, '_') + ".json";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        };
+
+        // =================================================================
+        // TÍNH NĂNG CẮM CỜ (FLAG) CÂU HỎI TRONG LÚC THI
+        // =================================================================
+        window.toggleFlagQuestion = function(qIdx) {
+            if (flaggedQuestions.has(qIdx)) {
+                flaggedQuestions.delete(qIdx);
+            } else {
+                flaggedQuestions.add(qIdx);
+            }
+            // Cập nhật giao diện nút cờ trên câu hỏi
+            const questionBlock = document.querySelector(`div.question-block[data-idx="${qIdx}"]`);
+            if (questionBlock) {
+                const flagBtn = questionBlock.querySelector('.flag-btn');
+                if (flagBtn) {
+                    const isFlagged = flaggedQuestions.has(qIdx);
+                    flagBtn.classList.toggle('flagged', isFlagged);
+                    flagBtn.title = isFlagged ? 'Bỏ cắm cờ' : 'Cắm cờ câu này';
+                    const svg = flagBtn.querySelector('svg');
+                    if (svg) svg.setAttribute('fill', isFlagged ? 'currentColor' : 'none');
+                }
+            }
+            // Cập nhật trạng thái cờ trên ô điều hướng
+            const navBtn = document.getElementById(`q-nav-${qIdx}`);
+            if (navBtn) {
+                navBtn.classList.toggle('flagged', flaggedQuestions.has(qIdx));
+            }
+            // Cập nhật nút lưu câu cắm cờ ở footer (nếu đang hiện)
+            if (!quizFooter.classList.contains('hidden')) {
+                footerSaveFlaggedBtn.classList.toggle('hidden', flaggedQuestions.size === 0);
+            }
+            window.safeSaveProgress();
+        };
+
+        window.saveFlaggedQuestionsToFile = function() {
+            if (flaggedQuestions.size === 0) return alert("Không có câu nào được cắm cờ!");
+            const fqs = currentQuizData.filter((_, i) => flaggedQuestions.has(i));
+            const t = "CAN_XEM_LAI_" + document.getElementById('take-title').textContent;
+
+            // Lọc chỉ những ảnh thực sự có trong các câu cắm cờ
+            const usedImages = {};
+            const imgRegex = /\[img:(.*?)\]/g;
+            const fqsString = JSON.stringify(fqs);
+            let match;
+            while ((match = imgRegex.exec(fqsString)) !== null) {
+                const imgId = match[1];
+                if (localImages[imgId]) usedImages[imgId] = localImages[imgId];
+            }
+
+            const blob = new Blob([JSON.stringify({title: t, questions: fqs, images: usedImages}, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = t.replace(/[^\p{L}a-z0-9]/giu, '_') + ".json";
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };
 

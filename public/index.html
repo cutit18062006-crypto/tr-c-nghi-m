@@ -797,7 +797,7 @@ return questions;
                 const blob = await docx.Packer.toBlob(doc);
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = titleText.replace(/[^a-z0-9]/gi, '_') + ".docx";
+                a.download = titleText.replace(/[^\p{L}a-z0-9]/giu, '_') + ".docx";
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
 
                 showToast("Xuất Word thành công!");
@@ -1040,7 +1040,7 @@ window.saveQuiz = function() {
     const blob = new Blob([JSON.stringify({title, questions: qs, images: usedImages}, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); 
     a.href = URL.createObjectURL(blob); 
-    a.download = title.replace(/[^a-z0-9]/gi, '_') + ".json";
+    a.download = title.replace(/[^\p{L}a-z0-9]/giu, '_') + ".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
 };
 
@@ -1294,7 +1294,7 @@ window.saveQuiz = function() {
             if (!sizeRaw || sizeRaw <= 0) return alert('Vui lòng nhập số câu hợp lệ!');
             if (sizeRaw >= qs.length) return alert(`Số câu mỗi đề (${sizeRaw}) phải nhỏ hơn tổng số câu (${qs.length})!`);
 
-            const baseTitle = (document.getElementById('split-title-input').value.trim() || quizTitleInput.value.trim() || 'De_Thi').replace(/[^a-z0-9_\-]/gi, '_');
+            const baseTitle = (document.getElementById('split-title-input').value.trim() || quizTitleInput.value.trim() || 'De_Thi').replace(/[^\p{L}a-z0-9_\-]/giu, '_');
 
             // Chia thành các nhóm - phần cuối nhận toàn bộ câu thừa
             const numFullParts = Math.floor(qs.length / sizeRaw);

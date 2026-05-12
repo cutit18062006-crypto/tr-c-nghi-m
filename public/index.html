@@ -1878,65 +1878,50 @@ window.resumeSavedQuiz = function() {
 
         // =================================================================
         // XỬ LÝ COPY LATEX TRONG MÀN HÌNH LÀM BÀI THI
-        // Khi KaTeX render, nó tạo cả phần hiển thị lẫn <annotation> chứa
-        // mã LaTeX gốc. Trình duyệt copy cả hai gây ra hiện tượng lặp.
-        // Handler này sẽ thay thế phần KaTeX bằng mã gốc khi copy.
+        // KaTeX tạo cả phần hiển thị (katex-html) lẫn phần MathML ẩn
+        // (katex-mathml chứa <annotation> với mã LaTeX gốc).
+        // Trình duyệt copy cả hai → bị lặp. Handler này sửa lại.
         // =================================================================
         document.getElementById('quiz-container').addEventListener('copy', function(e) {
             const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 
-            // Tạo một bản clone của nội dung được chọn
+            // Clone nội dung được chọn vào một div tạm để thao tác DOM
             const range = selection.getRangeAt(0);
-            const clonedContent = range.cloneContents();
+            const tempDiv = document.createElement('div');
+            tempDiv.appendChild(range.cloneContents());
 
-            // Hàm đệ quy: duyệt DOM và xây dựng chuỗi text sạch
-            function extractCleanText(node) {
-                // Nếu là text node thường
-                if (node.nodeType === Node.TEXT_NODE) {
-                    return node.textContent;
+            // Nếu không có KaTeX → để trình duyệt xử lý bình thường
+            const katexElements = tempDiv.querySelectorAll('.katex');
+            if (katexElements.length === 0) return;
+
+            e.preventDefault();
+
+            // Thay mỗi phần tử .katex bằng mã LaTeX gốc dạng text
+            katexElements.forEach(katexEl => {
+                // Tìm <annotation> chứa mã LaTeX gốc (MathML tag, lowercase)
+                const annotation = katexEl.querySelector('annotation');
+                let latexText = '';
+
+                if (annotation) {
+                    // Kiểm tra display mode: .katex-display là parent của .katex
+                    const isDisplay = !!(katexEl.parentElement && katexEl.parentElement.classList.contains('katex-display'));
+                    const delimiter = isDisplay ? '$$' : '$';
+                    latexText = delimiter + annotation.textContent + delimiter;
+                } else {
+                    // Clone không đầy đủ → lấy phần hiển thị (katex-html)
+                    const htmlPart = katexEl.querySelector('.katex-html');
+                    latexText = htmlPart ? htmlPart.textContent : katexEl.textContent;
                 }
 
-                // Nếu là element node
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    // Bỏ qua các thẻ annotation (KaTeX nhúng LaTeX gốc ở đây)
-                    if (node.tagName === 'ANNOTATION') return '';
+                katexEl.replaceWith(latexText);
+            });
 
-                    // Nếu là phần tử KaTeX (.katex), lấy mã LaTeX gốc từ <annotation>
-                    if (node.classList && node.classList.contains('katex')) {
-                        const annotation = node.querySelector('annotation[encoding="application/x-tex"]');
-                        if (annotation) {
-                            // Xác định display mode hay inline
-                            const isDisplay = node.closest('.katex-display');
-                            const delimiter = isDisplay ? '$$' : '$';
-                            return delimiter + annotation.textContent + delimiter;
-                        }
-                    }
+            // Dọn sạch các phần tử katex-mathml còn sót (nếu có)
+            tempDiv.querySelectorAll('.katex-mathml').forEach(el => el.remove());
 
-                    // Xử lý thẻ br và block-level elements
-                    let result = '';
-                    const isBlock = ['DIV', 'P', 'BR', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(node.tagName);
-
-                    for (const child of node.childNodes) {
-                        result += extractCleanText(child);
-                    }
-
-                    if (node.tagName === 'BR') return '\n';
-                    if (isBlock && result.trim()) return result + '\n';
-
-                    return result;
-                }
-
-                return '';
-            }
-
-            const cleanText = extractCleanText(clonedContent).replace(/\n{3,}/g, '\n\n').trim();
-
-            // Chỉ can thiệp nếu trong vùng chọn có chứa KaTeX
-            if (clonedContent.querySelector && clonedContent.querySelector('.katex')) {
-                e.preventDefault();
-                e.clipboardData.setData('text/plain', cleanText);
-            }
+            const cleanText = tempDiv.textContent.replace(/\n{3,}/g, '\n\n').trim();
+            e.clipboardData.setData('text/plain', cleanText);
         });
 
         window.selectAnswer = function(qIdx, oIdx, btn) {

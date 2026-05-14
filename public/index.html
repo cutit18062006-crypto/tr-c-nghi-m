@@ -1046,7 +1046,7 @@ window.saveQuiz = function() {
     }
 
     // Thay vì lưu 'localImages', chúng ta chỉ lưu 'usedImages' (những ảnh thực sự dùng)
-    const blob = new Blob([JSON.stringify({title, questions: qs, images: usedImages}, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({questions: qs, images: usedImages}, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); 
     a.href = URL.createObjectURL(blob); 
     a.download = title.replace(/[^\p{L}a-z0-9]/giu, '_') + ".json";
@@ -1355,7 +1355,7 @@ window.saveQuiz = function() {
                     if (usedImagesGlobal[m2[1]]) partImages[m2[1]] = usedImagesGlobal[m2[1]];
                 }
 
-                const blob = new Blob([JSON.stringify({ title: partTitle, questions: partQs, images: partImages }, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify({ questions: partQs, images: partImages }, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = partTitle + '.json';
@@ -2032,7 +2032,7 @@ window.resumeSavedQuiz = function() {
             // --- KẾT THÚC SỬA LỖI ---
 
             // Đổi `images: localImages` thành `images: usedImages`
-            const blob = new Blob([JSON.stringify({title: t, questions: wqs, images: usedImages}, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify({questions: wqs, images: usedImages}, null, 2)], { type: 'application/json' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = t.replace(/[^a-z0-9]/gi, '_') + ".json";
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };
@@ -2085,7 +2085,7 @@ window.resumeSavedQuiz = function() {
                 if (localImages[imgId]) usedImages[imgId] = localImages[imgId];
             }
 
-            const blob = new Blob([JSON.stringify({title: t, questions: fqs, images: usedImages}, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify({questions: fqs, images: usedImages}, null, 2)], { type: 'application/json' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = t.replace(/[^\p{L}a-z0-9]/giu, '_') + ".json";
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         };

@@ -49,6 +49,10 @@ app.post('/upload', upload.single('image'), (req, res) => {
     });
 });
 
+app.get('/lambaithi', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.listen(port, () => {
     console.log(`Ứng dụng đang chạy tại: http://localhost:${port}`);
 });

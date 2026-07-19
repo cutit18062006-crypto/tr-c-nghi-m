@@ -25,7 +25,7 @@
         .preserve-lines { white-space: pre-wrap; }
         .option-btn.correct-answer { background-color: #d1fae5 !important; border-color: #34d399 !important; color: #065f46; font-weight: bold; }
         .option-btn.wrong-answer { background-color: #fee2e2 !important; border-color: #f87171 !important; color: #991b1b; }
-        .nav-item { transition: all 0.2s; border-left: 4px solid transparent; white-space: nowrap; } 
+        .nav-item { transition: all 0.2s; border-left: 4px solid transparent; white-space: nowrap; text-decoration: none; color: inherit; } 
         .nav-item.active { background-color: #e0f2fe; border-left-color: #0284c7; color: #0369a1; font-weight: bold; }
         #sidebar { transition: width 0.3s ease-in-out, opacity 0.2s; }
         .sidebar-closed { width: 0 !important; opacity: 0; overflow: hidden; }
@@ -159,8 +159,8 @@
         </div>
         
         <nav class="p-4 space-y-2 shrink-0 min-w-[18rem]">
-            <button onclick="window.switchTab('create')" id="tab-create" class="nav-item w-full text-left px-4 py-3 rounded flex items-center gap-3 text-gray-600 hover:bg-gray-50 active">Tạo Đề Thi</button>
-            <button onclick="window.switchTab('take')" id="tab-take" class="nav-item w-full text-left px-4 py-3 rounded flex items-center gap-3 text-gray-600 hover:bg-gray-50">Làm Bài Thi</button>
+            <a href="/" onclick="event.preventDefault(); window.switchTab('create');" id="tab-create" class="nav-item w-full text-left px-4 py-3 rounded flex items-center gap-3 text-gray-600 hover:bg-gray-50 active block no-underline">Tạo Đề Thi</a>
+            <a href="/lambaithi" onclick="event.preventDefault(); window.switchTab('take');" id="tab-take" class="nav-item w-full text-left px-4 py-3 rounded flex items-center gap-3 text-gray-600 hover:bg-gray-50 block no-underline">Làm Bài Thi</a>
         </nav>
 
         <div id="settings-panel" class="px-4 py-2 shrink-0 min-w-[18rem] overflow-y-auto">
@@ -204,7 +204,7 @@
 
         <!-- VIEW 1: CREATE -->
         <div id="create-view" class="flex-1 flex p-6 gap-6 overflow-hidden">
-            <div class="w-1/2 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 h-full">
+            <div id="editor-container" class="w-1/2 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 h-full">
                 <!-- TOOLBAR -->
                 <div class="bg-gray-50 border-b border-gray-200 rounded-t-xl z-20">
                     <div class="w-full flex justify-between items-center pr-4 bg-gray-50 rounded-t-xl hover:bg-gray-100 transition-colors">
@@ -212,7 +212,10 @@
                             <span class="font-bold text-sm">Công cụ soạn thảo</span>
                             <svg id="tools-toggle-icon" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                         </button>
-                        <span id="draft-status" class="text-xs text-green-600 font-medium hidden">Đã lưu nháp</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="window.togglePreview()" id="btn-toggle-preview" class="p-1.5 px-3 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 text-xs font-bold transition-all shadow-sm">Ẩn Xem trước</button>
+                            <span id="draft-status" class="text-xs text-green-600 font-medium hidden">Đã lưu nháp</span>
+                        </div>
                     </div>
                     <div id="tools-content" class="px-4 pb-0 pt-0 transition-all duration-300 overflow-hidden flex flex-wrap gap-2 items-center bg-gray-50" style="max-height: 0px;">
                         
@@ -253,7 +256,7 @@
                 </div>
             </div>
 
-            <div class="w-1/2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full z-10">
+            <div id="preview-container" class="w-1/2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full z-10">
                 <div class="p-4 border-b bg-gray-50 rounded-t-xl"><h2 class="font-bold text-gray-700">Xem trước (Live Preview)</h2></div>
                 <div id="preview" class="flex-1 p-6 overflow-y-auto space-y-6 scroll-smooth"></div>
             </div>
@@ -375,6 +378,46 @@
         let isFooterVisible = true;
         let isSidebarOpen = true;
         let isToolsOpen = false;
+        let isPreviewHidden = false;
+
+        window.togglePreview = function() {
+            isPreviewHidden = !isPreviewHidden;
+            const editorContainer = document.getElementById('editor-container');
+            const previewContainer = document.getElementById('preview-container');
+            const btn = document.getElementById('btn-toggle-preview');
+            const isMobile = window.innerWidth < 768 || (window.innerWidth < 1024 && window.innerHeight < 600);
+            
+            if (isMobile) {
+                if (isPreviewHidden) {
+                    previewContainer.classList.remove('hidden');
+                    previewContainer.classList.remove('w-1/2');
+                    previewContainer.classList.add('w-full');
+                    editorContainer.classList.add('hidden');
+                    if (btn) btn.textContent = "Soạn thảo";
+                } else {
+                    previewContainer.classList.add('hidden');
+                    editorContainer.classList.remove('hidden');
+                    editorContainer.classList.remove('w-1/2');
+                    editorContainer.classList.add('w-full');
+                    if (btn) btn.textContent = "Xem trước";
+                }
+            } else {
+                editorContainer.classList.remove('hidden');
+                if (isPreviewHidden) {
+                    previewContainer.classList.add('hidden');
+                    editorContainer.classList.remove('w-1/2');
+                    editorContainer.classList.add('w-full');
+                    if (btn) btn.textContent = "Hiện Xem trước";
+                } else {
+                    previewContainer.classList.remove('hidden');
+                    previewContainer.classList.remove('w-full');
+                    previewContainer.classList.add('w-1/2');
+                    editorContainer.classList.remove('w-full');
+                    editorContainer.classList.add('w-1/2');
+                    if (btn) btn.textContent = "Ẩn Xem trước";
+                }
+            }
+        };
 
         let currentQuestionsForCompare = [];
         let currentTextDuplicateGroups = [];
@@ -579,12 +622,14 @@ return questions;
         // ------------------------------------------------------------------
         // CÁC HÀM UI & TOOLS (TÌM KIẾM, FORMAT, TẠO ĐỀ, QUÉT TRÙNG)
         // ------------------------------------------------------------------
-        window.switchTab = function(tab) {
+        window.switchTab = function(tab, skipPushState) {
             tabCreate.classList.remove('active'); tabTake.classList.remove('active');
             if (tab === 'create') {
                 viewCreate.classList.remove('hidden'); viewTake.classList.add('hidden');
                 tabCreate.classList.add('active'); settingsPanel.classList.remove('hidden');
                 questionNavPanel.classList.add('hidden'); resumeAlert.classList.add('hidden');
+                if (!skipPushState) history.pushState({ tab: 'create' }, '', '/');
+                document.title = 'Hệ thống Thi & Tạo Đề Chuyên Nghiệp';
             } else {
                 viewCreate.classList.add('hidden'); viewTake.classList.remove('hidden');
                 tabTake.classList.add('active'); settingsPanel.classList.add('hidden');
@@ -594,8 +639,25 @@ return questions;
                 if (currentQuizData.length > 0 && !document.getElementById('quiz-area').classList.contains('hidden')) {
                     questionNavPanel.classList.remove('hidden');
                 }
+                if (!skipPushState) history.pushState({ tab: 'take' }, '', '/lambaithi');
+                document.title = 'Làm Bài Thi - Quiz App Pro';
             }
         };
+
+        // Xử lý nút Back/Forward của trình duyệt
+        window.addEventListener('popstate', function(event) {
+            if (event.state && event.state.tab) {
+                window.switchTab(event.state.tab, true);
+            } else {
+                // Mặc định: đọc URL hiện tại
+                const path = window.location.pathname;
+                if (path === '/lambaithi') {
+                    window.switchTab('take', true);
+                } else {
+                    window.switchTab('create', true);
+                }
+            }
+        });
 
         window.toggleSidebar = function() {
             isSidebarOpen = !isSidebarOpen;
@@ -1842,7 +1904,18 @@ window.resumeSavedQuiz = function() {
                 btn.className = `q-nav-btn w-full aspect-square flex items-center justify-center rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:border-blue-400 focus:outline-none`;
                 if (flaggedQuestions.has(i)) btn.classList.add('flagged');
                 btn.id = `q-nav-${i}`;
-                btn.onclick = () => { const el = document.querySelector(`div[data-idx="${i}"]`); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('ring-2', 'ring-blue-400'); setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1500); } };
+                btn.onclick = () => { 
+                    const el = document.querySelector(`div[data-idx="${i}"]`); 
+                    if (el) { 
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+                        el.classList.add('ring-2', 'ring-blue-400'); 
+                        setTimeout(() => el.classList.remove('ring-2', 'ring-blue-400'), 1500); 
+                    } 
+                    const isMobile = window.innerWidth < 1024;
+                    if (isMobile && isSidebarOpen) {
+                        window.toggleSidebar();
+                    }
+                };
                 questionGrid.appendChild(btn);
             }
             questionNavPanel.classList.remove('hidden');
@@ -2111,8 +2184,43 @@ window.resumeSavedQuiz = function() {
 
         // INIT LOAD VÀ LOGIC AUTO-RESUME SIÊU TỐC
         document.addEventListener('DOMContentLoaded', () => {
+            // Tối ưu hóa không gian hiển thị cho thiết bị di động (Mobile Responsive UI Init)
+            const isMobile = window.innerWidth < 1024;
+            if (isMobile) {
+                // 1. Tự động thu gọn Sidebar
+                isSidebarOpen = false;
+                sidebar.classList.add('sidebar-closed');
+                sidebar.classList.remove('w-72');
+                sidebarToggleIcon.classList.add('rotate-180-icon');
+                quizFooter.style.left = "0";
+
+                // 2. Chế độ một màn hình (Tab Mode): Chỉ hiện Soạn thảo, ẩn Xem trước
+                const editorContainer = document.getElementById('editor-container');
+                const previewContainer = document.getElementById('preview-container');
+                const btn = document.getElementById('btn-toggle-preview');
+                
+                if (previewContainer && editorContainer) {
+                    isPreviewHidden = false;
+                    previewContainer.classList.add('hidden');
+                    editorContainer.classList.remove('w-1/2');
+                    editorContainer.classList.add('w-full');
+                    if (btn) btn.textContent = "Xem trước";
+                }
+            }
+
             window.loadDraft(); 
             window.toggleFileTools(); 
+
+            // --- ROUTER: Đọc URL để quyết định tab hiển thị ---
+            const currentPath = window.location.pathname;
+            const isLamBaiThiRoute = (currentPath === '/lambaithi' || currentPath === '/lambaithi/');
+
+            // Thiết lập state ban đầu cho history
+            if (isLamBaiThiRoute) {
+                history.replaceState({ tab: 'take' }, '', '/lambaithi');
+            } else {
+                history.replaceState({ tab: 'create' }, '', window.location.pathname);
+            }
 
             const savedProgressStr = localStorage.getItem('quiz_progress');
             if (savedProgressStr) {
@@ -2122,15 +2230,24 @@ window.resumeSavedQuiz = function() {
                     
                     // Chỉ cần có data bài thi cũ -> Tự động kéo thẳng vào màn hình làm bài ngay lập tức
                     if (totalQ > 0) {
-                        window.switchTab('take');
+                        window.switchTab('take', true);
                         window.resumeSavedQuiz();
+                    } else if (isLamBaiThiRoute) {
+                        window.switchTab('take', true);
+                        checkAndShowResume();
                     } else {
                         checkAndShowResume();
                     }
                 } catch(e) {
                     console.error("Lỗi khi đọc file lưu trữ tạm thời:", e);
+                    if (isLamBaiThiRoute) {
+                        window.switchTab('take', true);
+                    }
                     checkAndShowResume();
                 }
+            } else if (isLamBaiThiRoute) {
+                window.switchTab('take', true);
+                checkAndShowResume();
             } else {
                 checkAndShowResume();
             }
